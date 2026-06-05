@@ -3538,7 +3538,7 @@ git commit -m "feat(web): chat sessions, thread with GenUI, floating bubble"
 - Create: `web/src/components/ImportReview.tsx`
 - Replace: `web/src/pages/Settings.tsx`
 
-- [ ] **Step 1: `web/src/components/ImportReview.tsx`**
+- [x] **Step 1: `web/src/components/ImportReview.tsx`**
 
 ```tsx
 import { useState } from "react";
@@ -3612,7 +3612,7 @@ export function ImportReview() {
 }
 ```
 
-- [ ] **Step 2: Replace `web/src/pages/Settings.tsx`** — sectioned page:
+- [x] **Step 2: Replace `web/src/pages/Settings.tsx`** — sectioned page:
 
 ```tsx
 import { useState } from "react";
@@ -3758,8 +3758,8 @@ export default function Settings() {
 }
 ```
 
-- [ ] **Step 3: Build** — `npm run build` → clean
-- [ ] **Step 4: Commit**
+- [x] **Step 3: Build** — `npm run build` → clean
+- [x] **Step 4: Commit**
 
 ```bash
 git add web/src/
