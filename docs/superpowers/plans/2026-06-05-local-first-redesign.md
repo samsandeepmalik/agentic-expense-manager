@@ -1306,7 +1306,7 @@ git commit -m "feat(dashboard): SQLite aggregates with budgets and 6-month trend
 - Create: `api/app/services/dedup.py`
 - Test: `api/tests/test_dedup.py`
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 `api/tests/test_dedup.py`:
 
@@ -1328,9 +1328,9 @@ def test_flags_same_amount_within_one_day(conn):
     assert flag_duplicates(conn, rows) == [True, False, False]
 ```
 
-- [ ] **Step 2: Run** → FAIL
+- [x] **Step 2: Run** → FAIL
 
-- [ ] **Step 3: Implement `api/app/services/dedup.py`**
+- [x] **Step 3: Implement `api/app/services/dedup.py`**
 
 ```python
 """Duplicate detection for imports: same total, date within ±1 day."""
@@ -1355,8 +1355,8 @@ def flag_duplicates(conn: sqlite3.Connection, rows: list[dict]) -> list[bool]:
     return flags
 ```
 
-- [ ] **Step 4: Run** → PASS
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run** → PASS
+- [x] **Step 5: Commit**
 
 ```bash
 git add api/app/services/dedup.py api/tests/test_dedup.py
