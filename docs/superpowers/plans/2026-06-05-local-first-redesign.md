@@ -442,7 +442,7 @@ git commit -m "feat(api): typed AppError and error contract handler"
 - Create: `api/app/services/tax.py`
 - Test: `api/tests/test_tax.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 `api/tests/test_tax.py`:
 
@@ -476,9 +476,9 @@ def test_active_profile_components(conn):
     assert components == QC  # Quebec seeded active
 ```
 
-- [ ] **Step 2: Run** → FAIL (no module)
+- [x] **Step 2: Run** → FAIL (no module)
 
-- [ ] **Step 3: Implement `api/app/services/tax.py`**
+- [x] **Step 3: Implement `api/app/services/tax.py`**
 
 ```python
 """Tax back-calculation: user enters total paid; components are derived.
@@ -510,9 +510,9 @@ def active_components(conn: sqlite3.Connection) -> list[dict]:
 
 Also create empty `api/app/services/__init__.py` if missing (it exists from v1 — leave as is).
 
-- [ ] **Step 4: Run** — `poetry run pytest tests/test_tax.py -v` → 4 PASS
+- [x] **Step 4: Run** — `poetry run pytest tests/test_tax.py -v` → 4 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add api/app/services/tax.py api/tests/test_tax.py
