@@ -7,3 +7,5 @@ api/data/
 .DS_Store
 .superpowers/
 .omc/
+__pycache__/
+*.pyc
