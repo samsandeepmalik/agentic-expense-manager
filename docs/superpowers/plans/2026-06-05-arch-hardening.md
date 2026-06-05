@@ -99,7 +99,7 @@ git commit -m "fix(db): busy_timeout for write contention; WAL set once at init"
 - Modify: `api/app/services/sync.py` (replace `schedule_push`), `api/app/services/transactions.py`, `api/app/routes/transactions.py`, `api/app/main.py`
 - Test: `api/tests/test_sync.py`
 
-- [ ] **Step 1: Write failing tests** (append to `api/tests/test_sync.py`)
+- [x] **Step 1: Write failing tests** (append to `api/tests/test_sync.py`)
 
 ```python
 import asyncio
@@ -136,9 +136,9 @@ async def test_sync_worker_coalesces_bursts(db_path, monkeypatch):
     assert ran == [1]                  # one reconcile, not ten
 ```
 
-- [ ] **Step 2: Run** — `poetry run pytest tests/test_sync.py -v` → FAIL (`request_sync` missing)
+- [x] **Step 2: Run** — `poetry run pytest tests/test_sync.py -v` → FAIL (`request_sync` missing)
 
-- [ ] **Step 3: Implement trigger in `api/app/services/sync.py`.** Replace the whole `schedule_push` function with:
+- [x] **Step 3: Implement trigger in `api/app/services/sync.py`.** Replace the whole `schedule_push` function with:
 
 ```python
 _loop: asyncio.AbstractEventLoop | None = None
@@ -166,7 +166,7 @@ async def sync_worker(debounce: float = 2.0) -> None:
             await asyncio.to_thread(_safe_reconcile)
 ```
 
-- [ ] **Step 4: Trigger from the service layer.** In `api/app/services/transactions.py` add at top with the other relative imports: `from . import sync as sync_svc` is **wrong** (circular at import time is safe — sync imports transactions lazily — but keep it lazy anyway for clarity). Use a tiny helper at module level:
+- [x] **Step 4: Trigger from the service layer.** In `api/app/services/transactions.py` add at top with the other relative imports: `from . import sync as sync_svc` is **wrong** (circular at import time is safe — sync imports transactions lazily — but keep it lazy anyway for clarity). Use a tiny helper at module level:
 
 ```python
 def _request_sync() -> None:
@@ -198,9 +198,9 @@ def delete_transaction(conn, txn_id: int) -> None:
 
 (Note: `bulk_action`'s recategorize path calls `update_transaction` per id, which also fires — the worker coalesces, so over-firing is harmless. The test counts 5 because bulk delete fires once.)
 
-- [ ] **Step 5: Route cleanup.** In `api/app/routes/transactions.py` delete the `_schedule_sync_push` function and its two call sites (`create_transaction`, `update_transaction` routes) — the service owns triggering now.
+- [x] **Step 5: Route cleanup.** In `api/app/routes/transactions.py` delete the `_schedule_sync_push` function and its two call sites (`create_transaction`, `update_transaction` routes) — the service owns triggering now.
 
-- [ ] **Step 6: Start the worker.** In `api/app/main.py` lifespan, after `scheduler = asyncio.create_task(_scheduler_loop())` add:
+- [x] **Step 6: Start the worker.** In `api/app/main.py` lifespan, after `scheduler = asyncio.create_task(_scheduler_loop())` add:
 
 ```python
     from .services.sync import sync_worker
@@ -215,8 +215,8 @@ and change the teardown to:
     sync_task.cancel()
 ```
 
-- [ ] **Step 7: Run all** — `poetry run pytest -v` → PASS (existing `test_reconcile_pushes_once` unaffected)
-- [ ] **Step 8: Commit**
+- [x] **Step 7: Run all** — `poetry run pytest -v` → PASS (existing `test_reconcile_pushes_once` unaffected)
+- [x] **Step 8: Commit**
 
 ```bash
 git add api/app/services/sync.py api/app/services/transactions.py api/app/routes/transactions.py api/app/main.py api/tests/test_sync.py

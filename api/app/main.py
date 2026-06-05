@@ -71,8 +71,11 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("WhatsApp channel failed to start")
     scheduler = asyncio.create_task(_scheduler_loop())
+    from .services.sync import sync_worker
+    sync_task = asyncio.create_task(sync_worker())
     yield
     scheduler.cancel()
+    sync_task.cancel()
 
 
 app = FastAPI(title="Expense Manager API", lifespan=lifespan)

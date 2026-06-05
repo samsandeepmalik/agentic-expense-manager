@@ -16,6 +16,13 @@ COLUMNS = ["id", "date", "type", "category_id", "description", "merchant",
            "source", "external_ref", "sync_status", "created_at", "updated_at"]
 
 
+def _request_sync() -> None:
+    """Mark data dirty for the background Google sync worker (lazy import —
+    sync imports this module)."""
+    from . import sync
+    sync.request_sync()
+
+
 def _row_to_dict(conn, row) -> dict:
     txn = dict(row)
     txn["tax_breakdown"] = json.loads(txn["tax_breakdown"])
@@ -52,7 +59,9 @@ def create_transaction(conn: sqlite3.Connection, data: dict) -> dict:
          data.get("external_ref"), "pending"),
     )
     row = conn.execute("SELECT * FROM transactions WHERE id=?", (cursor.lastrowid,)).fetchone()
-    return _row_to_dict(conn, row)
+    result = _row_to_dict(conn, row)
+    _request_sync()
+    return result
 
 
 def list_transactions(conn, *, start: str | None = None, end: str | None = None,
@@ -103,16 +112,20 @@ def update_transaction(conn, txn_id: int, changes: dict) -> dict:
          merged["merchant"], parts["amount"], json.dumps(parts["breakdown"]),
          round(float(merged["total"]), 2), parts["counted"], txn_id),
     )
-    return get_transaction(conn, txn_id)
+    result = get_transaction(conn, txn_id)
+    _request_sync()
+    return result
 
 
 def delete_transaction(conn, txn_id: int) -> None:
     conn.execute("DELETE FROM transactions WHERE id=?", (txn_id,))
+    _request_sync()
 
 
 def bulk_action(conn, ids: list[int], action: str, category: str | None = None) -> int:
     if action == "delete":
         conn.executemany("DELETE FROM transactions WHERE id=?", [(i,) for i in ids])
+        _request_sync()
         return len(ids)
     if action == "recategorize":
         target = cat_svc.find_category_by_name(conn, category or "")

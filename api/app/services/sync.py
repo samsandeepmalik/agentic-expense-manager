@@ -114,15 +114,36 @@ def _maybe_upload_receipt(conn, txn: dict) -> str:
     return link
 
 
-def schedule_push(txn_id: int) -> None:
-    """Background push of one transaction (called after writes)."""
-    if not sync_enabled():
-        return
+_loop: asyncio.AbstractEventLoop | None = None
+_dirty: asyncio.Event | None = None
+
+
+def request_sync() -> None:
+    """Thread-safe dirty flag. Callable from any thread (agent tools run in
+    worker threads); the worker coalesces bursts into one reconcile."""
+    if _loop is None or _dirty is None or _loop.is_closed():
+        return  # worker not running (tests, scripts) — hourly reconcile covers it
     try:
-        loop = asyncio.get_running_loop()
+        _loop.call_soon_threadsafe(_dirty.set)
     except RuntimeError:
-        return
-    loop.create_task(asyncio.to_thread(_safe_reconcile))
+        pass  # loop shutting down
+
+
+async def sync_worker(debounce: float = 2.0) -> None:
+    """Long-lived task: wait for dirty flag, debounce, reconcile once."""
+    global _loop, _dirty
+    _loop = asyncio.get_running_loop()
+    _dirty = asyncio.Event()
+    try:
+        while True:
+            await _dirty.wait()
+            await asyncio.sleep(debounce)
+            _dirty.clear()
+            if sync_enabled():
+                await asyncio.to_thread(_safe_reconcile)
+    finally:
+        _loop = None
+        _dirty = None
 
 
 def _safe_reconcile() -> None:
