@@ -92,8 +92,10 @@ class WhatsAppManager:
             self._qr_codes = []
             try:
                 me = await client.get_me()
+                jid = getattr(me, "JID", None)
+                number = getattr(jid, "User", "") if jid is not None else ""
                 self.device = (getattr(me, "PushName", "")
-                               or str(getattr(me, "JID", "")))
+                               or (f"+{number}" if number else ""))
             except Exception:  # noqa: BLE001 — cosmetic only
                 self.device = ""
             logger.info("WhatsApp[%s] connected", self.id)
