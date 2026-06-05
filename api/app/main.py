@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .agent.runtime import run_to_completion, sessions
+from .channels.base import BaseChannelRegistry
 from .channels.whatsapp import whatsapp
 from .config import config
 from .db import init_db
@@ -26,8 +27,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+CHANNELS: list[BaseChannelRegistry] = [whatsapp]
 
-async def _handle_whatsapp_message(chat_id, text, image_bytes, image_mime):
+
+async def _handle_channel_message(chat_id, text, image_bytes, image_mime):
     session = sessions.get(f"wa:{chat_id}", channel="whatsapp")
     try:
         prompt = text
@@ -58,7 +61,8 @@ async def _scheduler_loop():
             now = datetime.now()
             if (now.weekday() == 6 and now.hour >= 18
                     and last_summary_day != now.date()):
-                await whatsapp.send_weekly_summary()
+                for channel in CHANNELS:
+                    await channel.send_weekly_summary()
                 last_summary_day = now.date()
         except Exception:  # noqa: BLE001
             logger.exception("Scheduler tick failed")
@@ -68,11 +72,12 @@ async def _scheduler_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    whatsapp.set_handler(_handle_whatsapp_message)
-    try:
-        await whatsapp.start()
-    except Exception:  # noqa: BLE001
-        logger.exception("WhatsApp channel failed to start")
+    for channel in CHANNELS:
+        channel.set_handler(_handle_channel_message)
+        try:
+            await channel.start()
+        except Exception:  # noqa: BLE001
+            logger.exception("%s channel failed to start", channel.name)
     scheduler = asyncio.create_task(_scheduler_loop())
     from .services.sync import sync_worker
     sync_task = asyncio.create_task(sync_worker())

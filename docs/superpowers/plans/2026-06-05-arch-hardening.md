@@ -809,7 +809,7 @@ git commit -m "feat(channels): BaseChannelRegistry contract + injectable client 
 **Files:**
 - Modify: `api/app/main.py`
 
-- [ ] **Step 1: Generalize.** In `api/app/main.py`:
+- [x] **Step 1: Generalize.** In `api/app/main.py`:
   - rename `_handle_whatsapp_message` → `_handle_channel_message` (same body; the `wa:` session prefix becomes channel-aware):
 
 ```python
@@ -847,8 +847,8 @@ CHANNELS: list[BaseChannelRegistry] = [whatsapp]
                     await channel.send_weekly_summary()
 ```
 
-- [ ] **Step 2: Verify** — `poetry run pytest -v` PASS; `poetry run python -c "from app.main import app; print('BOOT_OK')"` → BOOT_OK; `grep -n "whatsapp\." api/app/main.py | grep -v whatsapp_routes || echo NO_DIRECT_CALLS` → NO_DIRECT_CALLS
-- [ ] **Step 3: Commit**
+- [x] **Step 2: Verify** — `poetry run pytest -v` PASS; `poetry run python -c "from app.main import app; print('BOOT_OK')"` → BOOT_OK; `grep -n "whatsapp\." api/app/main.py | grep -v whatsapp_routes || echo NO_DIRECT_CALLS` → NO_DIRECT_CALLS
+- [x] **Step 3: Commit**
 
 ```bash
 git add api/app/main.py
