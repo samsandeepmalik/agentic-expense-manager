@@ -2514,7 +2514,7 @@ git commit -m "feat(whatsapp): detailed confirmations and weekly summary"
 - Rewrite: `api/app/main.py`
 - Delete: `api/app/services/sheets.py`, `api/app/store.py`
 
-- [ ] **Step 1: Rewrite `api/app/main.py`**
+- [x] **Step 1: Rewrite `api/app/main.py`**
 
 ```python
 """FastAPI application — local-first backend for UI and WhatsApp channels."""
@@ -2610,7 +2610,7 @@ async def health():
     return {"ok": True}
 ```
 
-- [ ] **Step 2: Delete legacy modules and fix stragglers**
+- [x] **Step 2: Delete legacy modules and fix stragglers**
 
 ```bash
 git rm api/app/services/sheets.py api/app/store.py
@@ -2618,7 +2618,7 @@ grep -rn "from ..store\|from .store\|services.sheets\|services import sheets" ap
 ```
 Fix any remaining importers (expected: none after Tasks 11-12).
 
-- [ ] **Step 3: Full backend verification**
+- [x] **Step 3: Full backend verification**
 
 ```bash
 cd api && poetry run pytest -v                       # all green
@@ -2634,7 +2634,7 @@ kill %1
 ```
 Expected: `BOOT_OK`, `{"ok":true}`, `DASHBOARD_ZEROS_OK`, `TAX_OK`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A api/
