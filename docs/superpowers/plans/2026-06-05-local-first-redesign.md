@@ -840,7 +840,7 @@ git commit -m "feat(categories): SQLite categories + tax profiles with budgets/t
 - Create: `api/app/routes/transactions.py`
 - Test: `api/tests/test_transactions.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 `api/tests/test_transactions.py`:
 
@@ -903,9 +903,9 @@ def test_csv_export(conn):
     assert "Metro" in csv_text and csv_text.startswith("id,date,type")
 ```
 
-- [ ] **Step 2: Run** → FAIL
+- [x] **Step 2: Run** → FAIL
 
-- [ ] **Step 3: Implement `api/app/services/transactions.py`**
+- [x] **Step 3: Implement `api/app/services/transactions.py`**
 
 ```python
 """Transaction CRUD, filters, bulk ops, CSV — all money math lives here."""
@@ -1047,9 +1047,9 @@ def export_csv(conn) -> str:
     return buffer.getvalue()
 ```
 
-- [ ] **Step 4: Run** — `poetry run pytest tests/test_transactions.py -v` → all PASS
+- [x] **Step 4: Run** — `poetry run pytest tests/test_transactions.py -v` → all PASS
 
-- [ ] **Step 5: Create `api/app/routes/transactions.py`**
+- [x] **Step 5: Create `api/app/routes/transactions.py`**
 
 ```python
 """Transactions API: CRUD, bulk, CSV export, receipt images."""
@@ -1158,7 +1158,7 @@ def _schedule_sync_push(txn_id: int) -> None:
         pass  # sync module lands in Task 12
 ```
 
-- [ ] **Step 6: API smoke test** (append to `api/tests/test_api.py`; extend the `client` fixture's app to also include `transactions_routes.router`)
+- [x] **Step 6: API smoke test** (append to `api/tests/test_api.py`; extend the `client` fixture's app to also include `transactions_routes.router`)
 
 ```python
 def test_quick_add_api(client):
@@ -1174,8 +1174,8 @@ def test_quick_add_api(client):
     assert "Metro" in export.text
 ```
 
-- [ ] **Step 7: Run all** — `poetry run pytest -v` → PASS
-- [ ] **Step 8: Commit**
+- [x] **Step 7: Run all** — `poetry run pytest -v` → PASS
+- [x] **Step 8: Commit**
 
 ```bash
 git add api/app/services/transactions.py api/app/routes/transactions.py api/tests/

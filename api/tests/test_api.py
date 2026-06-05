@@ -8,10 +8,12 @@ from app.errors import AppError, register_error_handler
 @pytest.fixture()
 def client(db_path):
     from app.routes import categories as categories_routes
+    from app.routes import transactions as transactions_routes
 
     app = FastAPI()
     register_error_handler(app)
     app.include_router(categories_routes.router)
+    app.include_router(transactions_routes.router)
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -70,3 +72,16 @@ def test_tax_profile_activate(client):
     profiles = client.get("/api/tax-profiles").json()
     active = [p for p in profiles if p["is_active"]]
     assert len(active) == 1 and active[0]["name"] == "Ontario"
+
+
+def test_quick_add_api(client):
+    response = client.post("/api/transactions", json={
+        "date": "2026-06-05", "type": "expense", "category": "Groceries",
+        "total": 114.98, "merchant": "Metro",
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body["amount"] == 100.0 and body["tax_breakdown"]["QST"] == 9.98
+
+    export = client.get("/api/transactions/export.csv")
+    assert "Metro" in export.text
