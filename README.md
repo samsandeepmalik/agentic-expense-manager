@@ -132,7 +132,8 @@ Open **Settings**:
 | `POST /api/imports` · `GET /{id}` · `POST /{id}/approve` | statement imports |
 | `GET/POST/DELETE /api/chat/sessions` · `POST .../messages` (SSE) | chat sessions |
 | `GET /api/sync/status` · `POST /api/sync/now` | Google sync |
-| `GET /api/whatsapp/qr` · `/status` | pairing QR + connection state |
+| `GET/POST /api/whatsapp/accounts` · `DELETE /{id}` · `POST /{id}/refresh` | multi-account pairing, unpair, QR refresh |
+| `GET /api/whatsapp/qr` · `/status` | legacy first-account QR + state |
 | `GET /api/google/auth` · `/callback` · `/status` | Google OAuth |
 | `GET /api/health` | liveness |
 

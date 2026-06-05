@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { del, get, post, type Category, type RecurringRule, type TaxProfile } from "../api";
+import { del, get, post, type Category, type RecurringRule, type TaxProfile,
+         type WaAccount } from "../api";
 import { ImportReview } from "../components/ImportReview";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -43,7 +44,15 @@ export default function Settings() {
     queryFn: () => get<{ configured: boolean; connected: boolean;
       sheet_url: string | null; pending: number }>("/api/google/status") });
   const whatsapp = useQuery({ queryKey: ["whatsapp"], refetchInterval: 4000,
-    queryFn: () => get<{ status: string; qr: string | null }>("/api/whatsapp/qr") });
+    queryFn: () => get<WaAccount[]>("/api/whatsapp/accounts") });
+  const addWa = useMutation({ mutationFn: () => post("/api/whatsapp/accounts"),
+    onSuccess: () => invalidate("whatsapp") });
+  const refreshWa = useMutation({
+    mutationFn: (id: string) => post(`/api/whatsapp/accounts/${id}/refresh`),
+    onSuccess: () => invalidate("whatsapp") });
+  const removeWa = useMutation({
+    mutationFn: (id: string) => del(`/api/whatsapp/accounts/${id}`),
+    onSuccess: () => invalidate("whatsapp") });
   const syncNow = useMutation({ mutationFn: () => post("/api/sync/now"),
     onSuccess: () => invalidate("google") });
 
@@ -126,13 +135,43 @@ export default function Settings() {
       </Section>
 
       <Section title="WhatsApp">
-        {whatsapp.data?.status === "connected"
-          ? <p>✅ Connected — message the linked account to chat with the agent.</p>
-          : whatsapp.data?.qr
-            ? <><p>Scan: WhatsApp → Settings → Linked devices → Link a device</p>
-                <img src={whatsapp.data.qr} style={{ width: 220, background: "#fff",
-                     padding: 8, borderRadius: 10 }} /></>
-            : <p className="muted">Waiting for QR… (status: {whatsapp.data?.status})</p>}
+        {(whatsapp.data ?? []).map((a) => (
+          <div key={a.id} style={{ borderBottom: "1px solid #f4efe7",
+                                   padding: "10px 0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ width: 9, height: 9, borderRadius: 5,
+                background: a.status === "connected" ? "var(--green)"
+                  : a.status === "qr" ? "var(--amber)" : "#cfc6b8" }} />
+              <b>{a.device || a.id}</b>
+              <span className="muted">{a.status}</span>
+              <span style={{ flex: 1 }} />
+              {(a.status === "qr_expired" || a.status === "disconnected") && (
+                <button className="ghost" disabled={refreshWa.isPending}
+                        onClick={() => refreshWa.mutate(a.id)}>
+                  {refreshWa.isPending ? "Refreshing…" : "↻ Refresh QR"}</button>)}
+              <button className="ghost" style={{ color: "var(--amber)" }}
+                      onClick={() => removeWa.mutate(a.id)}>
+                {a.status === "connected" ? "Unpair" : "Remove"}</button>
+            </div>
+            {a.status === "connected" && (
+              <p className="muted" style={{ margin: "6px 0 0 19px" }}>
+                Message the linked account to chat with the agent.</p>)}
+            {a.qr && (
+              <div style={{ margin: "8px 0 0 19px" }}>
+                <p style={{ margin: "0 0 6px" }}>
+                  Scan within 20s: WhatsApp → Settings → Linked devices → Link
+                  a device <span className="muted">(use that screen's scanner,
+                  not the phone camera)</span></p>
+                <img src={a.qr} style={{ width: 220, background: "#fff",
+                     padding: 8, borderRadius: 10 }} />
+              </div>)}
+            {a.status === "qr_expired" && (
+              <p className="muted" style={{ margin: "6px 0 0 19px" }}>
+                QR expired — refresh to get a new one.</p>)}
+          </div>))}
+        <button className="primary" style={{ marginTop: 12 }}
+                disabled={addWa.isPending} onClick={() => addWa.mutate()}>
+          ＋ Pair another account</button>
       </Section>
 
       <Section title="Import statements & sheets"><ImportReview /></Section>
