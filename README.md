@@ -135,6 +135,7 @@ Open **Settings**:
 | `GET/POST /api/whatsapp/accounts` · `DELETE /{id}` · `POST /{id}/refresh` | multi-account pairing, unpair, QR refresh |
 | `GET /api/whatsapp/qr` · `/status` | legacy first-account QR + state |
 | `GET /api/google/auth` · `/callback` · `/status` | Google OAuth |
+| `GET /api/audit` | activity feed (writes + sync outcomes) |
 | `GET /api/health` | liveness |
 
 ## Notes
@@ -147,3 +148,4 @@ Open **Settings**:
 - If OCR fails the receipt image is still saved and the agent asks you for
   the missing details.
 - API errors always follow `{"error": {"code", "message"}}`.
+- Every transaction write and sync outcome lands in the audit log (Settings → Activity).

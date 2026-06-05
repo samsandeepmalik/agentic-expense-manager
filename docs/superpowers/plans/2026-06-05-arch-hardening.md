@@ -862,7 +862,7 @@ git commit -m "refactor(main): channel-list wiring; scheduler iterates all chann
 **Files:**
 - Modify: `README.md`, `docs/arch-review-2026-06-05.md`
 
-- [ ] **Step 1: Full verification**
+- [x] **Step 1: Full verification**
 
 ```bash
 cd api && poetry run pytest -v            # all green (expect ~50)
@@ -876,7 +876,7 @@ curl -s localhost:8000/api/audit | python3 -c "import json,sys; rows=json.load(s
 curl -s localhost:8000/api/sync/status | python3 -m json.tool    # has last_error field
 ```
 
-- [ ] **Step 2: README.** In the API surface table add:
+- [x] **Step 2: README.** In the API surface table add:
 
 ```markdown
 | `GET /api/audit` | activity feed (writes + sync outcomes) |
@@ -884,7 +884,7 @@ curl -s localhost:8000/api/sync/status | python3 -m json.tool    # has last_erro
 
 and in Notes add: `- Every transaction write and sync outcome lands in the audit log (Settings → Activity).`
 
-- [ ] **Step 3: Mark review items done.** Append to `docs/arch-review-2026-06-05.md`:
+- [x] **Step 3: Mark review items done.** Append to `docs/arch-review-2026-06-05.md`:
 
 ```markdown
 
@@ -893,7 +893,7 @@ and in Notes add: `- Every transaction write and sync outcome lands in the audit
 All four roadmap moves implemented: sync trigger closed (service-layer dirty flag + debounced worker, busy_timeout), receipt_link promoted to transactions column with settings migration, audit_log + /api/audit + Settings activity feed + sync error surfacing, BaseChannelRegistry contract with injectable client factory and channel-agnostic main.py.
 ```
 
-- [ ] **Step 4: Final commit**
+- [x] **Step 4: Final commit**
 
 ```bash
 git add README.md docs/arch-review-2026-06-05.md

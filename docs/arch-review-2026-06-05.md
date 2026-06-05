@@ -100,3 +100,7 @@ Four coherent, independent moves, ordered by value-to-effort.
 - Frontend `api.ts` SSE parser and typed client — correct, low-churn.
 
 Files most relevant to the action items: `api/app/services/sync.py`, `api/app/agent/tools.py`, `api/app/services/recurring.py`, `api/app/db.py`, `api/app/channels/whatsapp.py`, `api/app/main.py` (all under `/Users/sandeepmalik/Documents/projects/expense_management/`).
+
+---
+## Status (2026-06-05, post-hardening)
+All four roadmap moves implemented: sync trigger closed (service-layer dirty flag + debounced worker, busy_timeout), receipt_link promoted to transactions column with settings migration, audit_log + /api/audit + Settings activity feed + sync error surfacing, BaseChannelRegistry contract with injectable client factory and channel-agnostic main.py.
