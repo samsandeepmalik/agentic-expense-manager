@@ -1566,7 +1566,7 @@ git commit -m "feat(recurring): rules with catch-up scheduler logic"
 - Rewrite: `api/app/routes/chat.py`
 - Test: `api/tests/test_chat_store.py`
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 `api/tests/test_chat_store.py`:
 
@@ -1592,9 +1592,9 @@ def test_session_lifecycle(conn):
     assert chat_store.list_sessions(conn) == []
 ```
 
-- [ ] **Step 2: Run** → FAIL
+- [x] **Step 2: Run** → FAIL
 
-- [ ] **Step 3: Implement `api/app/services/chat_store.py`**
+- [x] **Step 3: Implement `api/app/services/chat_store.py`**
 
 ```python
 """Persistent chat sessions and messages (survive restarts)."""
@@ -1663,9 +1663,9 @@ def list_messages(conn, session_id: str) -> list[dict]:
         "SELECT * FROM chat_messages WHERE session_id=? ORDER BY id", (session_id,))]
 ```
 
-- [ ] **Step 4: Run** → PASS
+- [x] **Step 4: Run** → PASS
 
-- [ ] **Step 5: Modify `api/app/agent/runtime.py`**
+- [x] **Step 5: Modify `api/app/agent/runtime.py`**
 
 Changes (keep provider registration block and `_claude_model()` untouched):
 
@@ -1718,7 +1718,7 @@ and just before the final `yield {"type": "done", ...}`:
                 })
 ```
 
-- [ ] **Step 6: Rewrite `api/app/routes/chat.py`**
+- [x] **Step 6: Rewrite `api/app/routes/chat.py`**
 
 ```python
 """Chat: session management + SSE message streaming."""
@@ -1797,13 +1797,13 @@ async def send_message(session_id: str, message: str = Form(""),
                                       "X-Accel-Buffering": "no"})
 ```
 
-- [ ] **Step 7: Run full suite + import check**
+- [x] **Step 7: Run full suite + import check**
 
 ```bash
 cd api && poetry run pytest -v && poetry run python -c "from app.routes import chat; print('OK')"
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add api/app/services/chat_store.py api/app/agent/runtime.py api/app/routes/chat.py api/tests/test_chat_store.py

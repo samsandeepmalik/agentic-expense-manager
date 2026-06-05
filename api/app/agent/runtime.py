@@ -18,6 +18,7 @@ from pi_agent.agent_core import (
     AssistantMessage,
     Model,
     TextContent,
+    UserMessage,
 )
 from pi_agent.pi_ai import create_agent_stream_fn, create_default_registry
 
@@ -37,6 +38,13 @@ def _claude_model() -> Model:
         provider="anthropic",
         api="anthropic",
         base_url=config.anthropic_base_url,
+    )
+
+
+def _replayed_assistant(text: str) -> AssistantMessage:
+    return AssistantMessage(
+        content=[TextContent(text=text)],
+        api="anthropic", provider="anthropic", model=config.claude_model,
     )
 
 
@@ -61,6 +69,19 @@ class Session:
             build_tools(channel, self._ui_specs.append, source=channel)
         )
 
+        from ..db import get_db
+        from ..services import chat_store
+        with get_db() as conn:
+            chat_store.ensure_session(conn, session_id, channel)
+            for message in chat_store.list_messages(conn, session_id):
+                text = message["content"].get("text", "")
+                if not text:
+                    continue
+                if message["role"] == "user":
+                    self.agent.append_message(UserMessage(content=text))
+                else:
+                    self.agent.append_message(_replayed_assistant(text))
+
     async def run(self, text: str) -> AsyncIterator[dict[str, Any]]:
         """Send a user message; yield normalized streaming events:
 
@@ -70,6 +91,10 @@ class Session:
         {type: "done", text, error}      — final assistant text
         """
         async with self.lock:
+            from ..db import get_db
+            from ..services import chat_store
+            with get_db() as conn:
+                chat_store.add_message(conn, self.id, "user", {"text": text})
             self._ui_specs.clear()
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
@@ -135,6 +160,11 @@ class Session:
                     pass
 
             error = self.agent.state.error
+            with get_db() as conn:
+                chat_store.add_message(conn, self.id, "assistant", {
+                    "text": "\n".join(final_text_parts).strip(),
+                    "ui_specs": self._ui_specs[:],
+                })
             yield {
                 "type": "done",
                 "text": "\n".join(final_text_parts).strip(),
