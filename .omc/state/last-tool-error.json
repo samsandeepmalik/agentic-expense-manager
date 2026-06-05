@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"poetry run python -c \\\"\\nfrom app.db import init_db\\ninit_db()\\nfrom app.agent.runtime import sessions\\ns = sessions.get('t:1','ui')\\nprint([t.name for t in s.agent.state.tools])\\\"\",\"descr...",
-  "error": "Exit code 1\n\nPoetry could not find a pyproject.toml file in /Users/sandeepmalik/Documents/projects/expense_management or its parents",
-  "timestamp": "2026-06-05T17:13:14.533Z",
-  "retry_count": 3
-}
