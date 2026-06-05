@@ -31,3 +31,23 @@ def test_connection_pragmas(conn):
     assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+
+
+def test_receipt_link_column_and_migration(tmp_path, monkeypatch):
+    from app import db
+    db.DB_PATH = tmp_path / "migrate.db"
+    db.init_db()
+    with db.get_db() as conn:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
+        assert "receipt_link" in cols
+        # simulate legacy junk-drawer rows, then re-init to migrate
+        conn.execute("""INSERT INTO transactions(date,type,category_id,amount,
+                        total,counted) VALUES ('2026-06-01','expense',1,1,1,1)""")
+        txn_id = conn.execute("SELECT max(id) m FROM transactions").fetchone()["m"]
+        db.set_setting(conn, f"receipt_link_{txn_id}", "https://drive/x")
+    db.init_db()
+    with db.get_db() as conn:
+        row = conn.execute("SELECT receipt_link FROM transactions WHERE id=?",
+                           (txn_id,)).fetchone()
+        assert row["receipt_link"] == "https://drive/x"
+        assert db.get_setting(conn, f"receipt_link_{txn_id}") is None

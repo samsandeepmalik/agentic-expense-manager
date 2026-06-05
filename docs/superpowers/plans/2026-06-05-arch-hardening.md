@@ -299,7 +299,7 @@ git commit -m "refactor(settings): central key constants, no scattered literals"
 - Modify: `api/app/db.py` (migration), `api/app/services/sync.py`
 - Test: `api/tests/test_db.py`, `api/tests/test_sync.py`
 
-- [ ] **Step 1: Write failing tests.** Append to `api/tests/test_db.py`:
+- [x] **Step 1: Write failing tests.** Append to `api/tests/test_db.py`:
 
 ```python
 def test_receipt_link_column_and_migration(tmp_path, monkeypatch):
@@ -337,9 +337,9 @@ def test_receipt_upload_uses_column(conn, monkeypatch):
     assert sync._maybe_upload_receipt(conn, fresh) == "https://drive/y"
 ```
 
-- [ ] **Step 2: Run** → FAIL (no column)
+- [x] **Step 2: Run** → FAIL (no column)
 
-- [ ] **Step 3: Implement migration in `api/app/db.py` `init_db()`** (after the seed blocks, inside the same `with get_db() as conn:`):
+- [x] **Step 3: Implement migration in `api/app/db.py` `init_db()`** (after the seed blocks, inside the same `with get_db() as conn:`):
 
 ```python
         # Migration: receipt_link column (was settings junk-drawer keys)
@@ -357,7 +357,7 @@ def test_receipt_upload_uses_column(conn, monkeypatch):
             conn.execute("DELETE FROM settings WHERE key=?", (row["key"],))
 ```
 
-- [ ] **Step 4: Use the column in `api/app/services/sync.py`.** Replace `_maybe_upload_receipt`:
+- [x] **Step 4: Use the column in `api/app/services/sync.py`.** Replace `_maybe_upload_receipt`:
 
 ```python
 def _maybe_upload_receipt(conn, txn: dict) -> str:
@@ -373,8 +373,8 @@ def _maybe_upload_receipt(conn, txn: dict) -> str:
     return link
 ```
 
-- [ ] **Step 5: Run all** — `poetry run pytest -v` → PASS
-- [ ] **Step 6: Commit**
+- [x] **Step 5: Run all** — `poetry run pytest -v` → PASS
+- [x] **Step 6: Commit**
 
 ```bash
 git add api/app/db.py api/app/services/sync.py api/tests/

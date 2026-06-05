@@ -103,15 +103,15 @@ def reconcile() -> dict:
 
 
 def _maybe_upload_receipt(conn, txn: dict) -> str:
-    link = get_setting(conn, f"receipt_link_{txn['id']}")
-    if link:
-        return link
+    if txn.get("receipt_link"):
+        return txn["receipt_link"]
     if not txn["image_path"] or not Path(txn["image_path"]).exists():
         return ""
     data = Path(txn["image_path"]).read_bytes()
     suffix = Path(txn["image_path"]).suffix.lstrip(".") or "jpg"
     link = gc.upload_receipt_image(Path(txn["image_path"]).name, data, f"image/{suffix}")
-    set_setting(conn, f"receipt_link_{txn['id']}", link)
+    conn.execute("UPDATE transactions SET receipt_link=? WHERE id=?",
+                 (link, txn["id"]))
     return link
 
 

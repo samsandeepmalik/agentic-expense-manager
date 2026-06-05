@@ -113,6 +113,19 @@ def init_db() -> None:
                 "INSERT INTO tax_profiles(name, components, is_active) VALUES (?,?,?)",
                 [(n, json.dumps(c), a) for n, c, a in TAX_PRESETS],
             )
+        # Migration: receipt_link column (was settings junk-drawer keys)
+        columns = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
+        if "receipt_link" not in columns:
+            conn.execute("ALTER TABLE transactions ADD COLUMN receipt_link TEXT")
+        legacy = conn.execute(
+            "SELECT key, value FROM settings WHERE key LIKE 'receipt_link_%'"
+        ).fetchall()
+        for row in legacy:
+            txn_id = row["key"].removeprefix("receipt_link_")
+            if txn_id.isdigit():
+                conn.execute("UPDATE transactions SET receipt_link=? WHERE id=?",
+                             (json.loads(row["value"]), int(txn_id)))
+            conn.execute("DELETE FROM settings WHERE key=?", (row["key"],))
 
 
 @contextmanager

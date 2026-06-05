@@ -67,3 +67,15 @@ async def test_sync_worker_coalesces_bursts(db_path, monkeypatch):
     await asyncio.sleep(0.2)
     worker.cancel()
     assert ran == [1]                  # one reconcile, not ten
+
+
+def test_receipt_upload_uses_column(conn, monkeypatch):
+    txn = txn_svc.create_transaction(conn, {
+        "date": "2026-06-05", "type": "expense", "category": "Groceries",
+        "total": 9.0})
+    conn.execute("UPDATE transactions SET receipt_link='https://drive/y' WHERE id=?",
+                 (txn["id"],))
+    fresh = dict(conn.execute("SELECT * FROM transactions WHERE id=?",
+                              (txn["id"],)).fetchone())
+    fresh["category"] = "Groceries"
+    assert sync._maybe_upload_receipt(conn, fresh) == "https://drive/y"
