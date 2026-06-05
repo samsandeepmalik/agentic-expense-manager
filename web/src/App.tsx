@@ -1,47 +1,24 @@
+import { Route, Routes } from "react-router-dom";
 import { useState } from "react";
-import { Categories } from "./components/Categories";
-import { Chat } from "./components/Chat";
-import { Connect } from "./components/Connect";
-import { Dashboard } from "./components/Dashboard";
-
-type Tab = "dashboard" | "chat" | "categories" | "connect";
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "chat", label: "Chat" },
-  { id: "categories", label: "Categories" },
-  { id: "connect", label: "Connect" },
-];
+import { TopBar } from "./components/TopBar";
+import { ChatBubble } from "./components/ChatBubble";
+import Dashboard from "./pages/Dashboard";
+import Transactions from "./pages/Transactions";
+import Chat from "./pages/Chat";
+import Settings from "./pages/Settings";
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("dashboard");
-  const [refreshKey, setRefreshKey] = useState(0);
-
+  const [period, setPeriod] = useState<string>("");   // "" = current month
   return (
-    <div className="app">
-      <header>
-        <div className="brand">💰 Expense Manager</div>
-        <nav>
-          {TABS.map((item) => (
-            <button
-              key={item.id}
-              className={tab === item.id ? "active" : ""}
-              onClick={() => {
-                setTab(item.id);
-                if (item.id === "dashboard") setRefreshKey((key) => key + 1);
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </header>
-      <main>
-        {tab === "dashboard" && <Dashboard refreshKey={refreshKey} />}
-        {tab === "chat" && <Chat />}
-        {tab === "categories" && <Categories />}
-        {tab === "connect" && <Connect />}
-      </main>
+    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "0 24px 48px" }}>
+      <TopBar period={period} onPeriod={setPeriod} />
+      <Routes>
+        <Route path="/" element={<Dashboard period={period} />} />
+        <Route path="/transactions" element={<Transactions period={period} />} />
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/settings" element={<Settings />} />
+      </Routes>
+      <ChatBubble />
     </div>
   );
 }

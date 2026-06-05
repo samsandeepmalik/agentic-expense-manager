@@ -2652,14 +2652,14 @@ git commit -m "feat(api): rewire main, schedulers, remove sheets-as-storage"
 - Delete: `web/src/*` (all v1 files)
 - Create: `web/src/theme.css`, `web/src/api.ts`, `web/src/main.tsx`, `web/src/App.tsx`, `web/src/components/TopBar.tsx`
 
-- [ ] **Step 1: Deps**
+- [x] **Step 1: Deps**
 
 ```bash
 cd web && rm -rf src && mkdir -p src/components src/pages
 npm install react-router-dom @tanstack/react-query
 ```
 
-- [ ] **Step 2: `web/src/theme.css`** — warm design tokens (spec §8):
+- [x] **Step 2: `web/src/theme.css`** — warm design tokens (spec §8):
 
 ```css
 :root {
@@ -2692,7 +2692,7 @@ td { padding: 8px 10px; border-bottom: 1px solid #f4efe7; }
 .bar.warn > div { background: var(--amber); }
 ```
 
-- [ ] **Step 3: `web/src/api.ts`** — transport only:
+- [x] **Step 3: `web/src/api.ts`** — transport only:
 
 ```typescript
 export interface Category { id: number; name: string; type: "income" | "expense";
@@ -2770,7 +2770,7 @@ export async function streamChat(sessionId: string, message: string,
 }
 ```
 
-- [ ] **Step 4: Shell** — `web/src/main.tsx`:
+- [x] **Step 4: Shell** — `web/src/main.tsx`:
 
 ```tsx
 import React from "react";
@@ -2869,7 +2869,7 @@ export function TopBar({ period, onPeriod }:
 }
 ```
 
-- [ ] **Step 5: Stub remaining files so the build passes** — create minimal placeholder components that the next tasks replace with real implementations. Each stub must compile:
+- [x] **Step 5: Stub remaining files so the build passes** — create minimal placeholder components that the next tasks replace with real implementations. Each stub must compile:
 
 ```tsx
 // web/src/pages/Dashboard.tsx  (replaced in Task 17)
@@ -2900,8 +2900,8 @@ export default function Settings() { return <div className="card">Settings — T
 export function ChatBubble() { return null; }
 ```
 
-- [ ] **Step 6: Build** — `cd web && npm run build` → expect clean
-- [ ] **Step 7: Commit**
+- [x] **Step 6: Build** — `cd web && npm run build` → expect clean
+- [x] **Step 7: Commit**
 
 ```bash
 git add web/
