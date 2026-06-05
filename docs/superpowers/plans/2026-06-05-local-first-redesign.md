@@ -3773,7 +3773,7 @@ git commit -m "feat(web): settings — categories, tax, recurring, connections, 
 **Files:**
 - Modify: `README.md`
 
-- [ ] **Step 1: Full local verification**
+- [x] **Step 1: Full local verification**
 
 ```bash
 cd api && poetry run pytest -v                                  # all green
@@ -3788,7 +3788,7 @@ curl -s localhost:8000/api/whatsapp/qr | head -c 60             # QR png data-ur
 curl -s localhost:5173/ -o /dev/null -w '%{http_code}\n'        # 200
 ```
 
-- [ ] **Step 2: Live chat smoke (needs CLAUDE_CODE_OAUTH_TOKEN in .env)**
+- [x] **Step 2: Live chat smoke (needs CLAUDE_CODE_OAUTH_TOKEN in .env)**
 
 ```bash
 SESSION=$(curl -s -X POST localhost:8000/api/chat/sessions | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
@@ -3798,9 +3798,9 @@ curl -s "localhost:8000/api/transactions?period=" | python3 -m json.tool | head 
 # expect: Costco row with back-calculated GST/QST
 ```
 
-- [ ] **Step 3: Update `README.md`** — replace the Architecture section: SQLite is the source of truth (`api/data/expense.db`); Google = optional one-way sync; new features list (quick-add, budgets, recurring, imports, tax profiles, chat sessions); same Makefile usage. Keep setup-token instructions.
+- [x] **Step 3: Update `README.md`** — replace the Architecture section: SQLite is the source of truth (`api/data/expense.db`); Google = optional one-way sync; new features list (quick-add, budgets, recurring, imports, tax profiles, chat sessions); same Makefile usage. Keep setup-token instructions.
 
-- [ ] **Step 4: Final commit**
+- [x] **Step 4: Final commit**
 
 ```bash
 git add -A

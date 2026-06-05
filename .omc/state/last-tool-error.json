@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"which brew; brew --version 2>/dev/null; ls /opt/homebrew/lib/libmagic* 2>/dev/null; ls /usr/local/lib/libmagic* 2>/dev/null\",\"description\":\"Check brew and libmagic presence\"}",
-  "error": "Exit code 1\n/opt/homebrew/bin/brew\nHomebrew 5.1.15\n(eval):1: no matches found: /opt/homebrew/lib/libmagic*\n(eval):1: no matches found: /usr/local/lib/libmagic*",
-  "timestamp": "2026-06-05T01:44:19.401Z",
-  "retry_count": 2
+  "tool_input_preview": "{\"command\":\"poetry run python -c \\\"\\nfrom app.db import init_db\\ninit_db()\\nfrom app.agent.runtime import sessions\\ns = sessions.get('t:1','ui')\\nprint([t.name for t in s.agent.state.tools])\\\"\",\"descr...",
+  "error": "Exit code 1\n\nPoetry could not find a pyproject.toml file in /Users/sandeepmalik/Documents/projects/expense_management or its parents",
+  "timestamp": "2026-06-05T17:13:14.533Z",
+  "retry_count": 3
 }
