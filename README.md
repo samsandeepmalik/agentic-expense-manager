@@ -1,123 +1,66 @@
 # Expense Manager
 
-Local-first income & expense management with a chat agent, receipt OCR, a warm
-web dashboard with generative UI, a WhatsApp channel, and optional one-way
-Google Sheets/Drive sync.
+Local-first income & expense management with an AI chat agent, receipt OCR,
+a warm web dashboard with generative UI, a WhatsApp channel, and optional
+one-way Google Sheets/Drive sync.
 
-## Architecture
+SQLite is the single source of truth — everything works offline with just a
+Claude token. OCR and Google sync are optional add-ons.
 
-```
-web/  React + Vite (no business logic — renders backend data + generative UI specs)
-  │  /api/*
-api/  Python 3.13 + FastAPI (all business logic)
-  ├─ SQLite (api/data/expense.db)             — source of truth: transactions,
-  │                                             categories, tax profiles, budgets,
-  │                                             recurring rules, chat history
-  ├─ Pi agent (pi-agent Python SDK) + Claude  — chat, extraction, tool calling
-  ├─ neonize                                  — WhatsApp (QR pairing, messages)
-  ├─ NVIDIA build.nvidia.com (PaddleOCR)      — receipt OCR
-  └─ Google Drive + Sheets (optional)         — one-way sync mirror, never read back
-```
-
-- **Local-first**: SQLite is the single source of truth. Everything works
-  without Google or NVIDIA keys (only OCR and sync need them).
-- **Agent framework**: [Pi agent](https://pi.dev) via the Python SDK
-  ([`pi-agent`](https://pypi.org/project/pi-agent/)). Claude is wired through
-  Anthropic's native Messages API with a Claude Max OAuth token
-  (`claude setup-token`) or an `ANTHROPIC_API_KEY`.
-- **Channels**: web UI chat (SSE streaming, persistent sessions) and WhatsApp
-  (scan QR in Settings). Both go through the same agent pipeline.
-- **Tax back-calculation**: you enter the total paid; GST/QST/HST components
-  are derived server-side from the category's taxable flag and the active tax
-  profile (Quebec / Ontario / Alberta presets, editable).
-- **Generative UI**: the agent's `render_ui` tool emits declarative component
-  specs (metric / line / bar / pie / table); the frontend just renders them.
-  On WhatsApp the agent answers with plain text instead.
-- **Google sync**: optional, one-way (app → Sheet + Drive). Idempotent
-  reconcile pushes pending rows hourly and after each write; deletions blank
-  the mirrored row. The sheet is never read back.
+**Docs:** [Architecture](docs/architecture.md) · [Development](docs/development.md) · [Design review](docs/arch-review-2026-06-05.md)
 
 ## Features
 
-- Dashboard: income/expenses/net metrics, 6-month trend, category pie,
-  budgets rail with alerts at 90%, recent transactions, quick-add modal with
-  live tax preview.
-- Transactions: period/type/category/text filters, inline edit (taxes
-  recomputed server-side), bulk delete/recategorize, CSV export, receipt
-  lightbox.
-- Chat: persistent sessions with history replay, generative UI, floating
-  quick-chat bubble on every page.
-- Settings: categories (percent counting formula, taxable flag, monthly
-  budget), tax profiles, recurring rules, Google + WhatsApp connections,
-  statement imports (CSV/XLSX/PDF) with agent parsing and duplicate
-  pre-skipping.
-- Recurring rules: weekly/biweekly/monthly templates auto-record on schedule
-  (with catch-up for missed periods).
-- WhatsApp: record by text or receipt photo, detailed confirmations, weekly
-  summary every Sunday evening.
+- **Dashboard** — income/expenses/net metrics, 6-month trend, category pie,
+  per-category budgets with 90% alerts, quick-add modal with live tax preview.
+- **Tax back-calculation** — enter the total paid; GST/QST/HST are derived
+  server-side from the category's taxable flag and the active tax profile
+  (Quebec / Ontario / Alberta presets).
+- **Chat agent** — "spent $42.50 at Metro on groceries" or a receipt photo;
+  persistent sessions, streaming replies, inline generative charts/tables.
+- **WhatsApp** — pair your account (QR), then talk to the agent in your own
+  *"Message yourself"* chat. Multi-account, sender allowlist, weekly summary.
+  Strangers are ignored.
+- **Receipt OCR** — selectable provider: NVIDIA PaddleOCR, Claude vision, or
+  OpenAI vision (Settings → Receipt OCR).
+- **Transactions** — filters, inline edit (taxes recomputed), bulk
+  delete/recategorize, CSV export, receipt lightbox.
+- **Imports** — upload bank statements (CSV/XLSX/PDF); the agent structures
+  rows, duplicates pre-skipped, you review and approve.
+- **Recurring rules** — rent/salary templates auto-record on schedule.
+- **Audit trail** — every write and sync outcome logged (Settings → Activity).
+- **Google sync** — optional one-way mirror (app → Sheet + Drive), debounced,
+  idempotent, never read back.
 
-## Setup
-
-### 1. Environment
-
-```bash
-cp .env.example .env
-```
-
-| Variable | Where to get it |
-|---|---|
-| `CLAUDE_CODE_OAUTH_TOKEN` | from your Claude Max subscription: `claude setup-token` (or set `ANTHROPIC_API_KEY` from console.anthropic.com) |
-| `NVIDIA_API_KEY` (optional) | build.nvidia.com → any model → Get API Key — only needed for receipt OCR |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (optional) | Google Cloud Console → OAuth client (Web application). Enable the **Drive** and **Sheets** APIs and add `http://localhost:8000/api/google/callback` as an authorized redirect URI — only needed for sync |
-
-### 2. Run with Docker (Makefile)
+## Quickstart
 
 ```bash
-make start     # build + start backend (API) and console (web UI)
-make logs      # follow logs (also: logs-api, logs-web)
-make status    # container status
-make stop      # stop containers, keep state
-make cleanup   # remove containers, volumes (sessions!) and images
+cp .env.example .env          # set CLAUDE_CODE_OAUTH_TOKEN (claude setup-token)
+make start                    # Docker: web http://localhost:5173 · api :8000
 ```
 
-Web UI: http://localhost:5173 · API: http://localhost:8000
-
-### 3. Run locally (dev)
+| Env var | Needed for | Where to get it |
+|---|---|---|
+| `CLAUDE_CODE_OAUTH_TOKEN` | agent + Claude OCR | `claude setup-token` (Claude Max) — or `ANTHROPIC_API_KEY` |
+| `NVIDIA_API_KEY` | PaddleOCR provider | build.nvidia.com (optional) |
+| `OPENAI_API_KEY` | OpenAI OCR provider | platform.openai.com (optional) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Sheets/Drive sync | Google Cloud Console OAuth client; redirect URI `http://localhost:8000/api/google/callback` (optional) |
 
 ```bash
-# backend (needs libmagic: brew install libmagic / apt install libmagic1)
-cd api && poetry install --no-root
-poetry run uvicorn app.main:app --reload --port 8000
-
-# frontend
-cd web && npm install && npm run dev
+make logs / logs-api / logs-web   # follow logs
+make stop                         # stop, keep state
+make cleanup                      # remove containers + volumes (sessions!)
 ```
 
-### 4. Connect accounts (optional)
+Local dev without Docker: see [docs/development.md](docs/development.md).
 
-Open **Settings**:
+## Connect WhatsApp
 
-1. **Google** — click *Connect Google*, approve. The app creates the
-   "Expense Manager" spreadsheet and "Expense Receipts" Drive folder and
-   starts mirroring transactions one-way.
-2. **WhatsApp** — scan the QR with WhatsApp → Settings → Linked devices →
-   Link a device. Then message yourself / the linked account to talk to the
-   agent.
-
-## Using it
-
-- **Quick add**: + button on the dashboard — enter the total paid; the tax
-  breakdown previews live and is computed server-side on save.
-- **Chat**: type "spent $42.50 at Metro on groceries" or attach a receipt
-  photo. The agent OCRs it (NVIDIA), saves the image locally, and records the
-  transaction with back-calculated taxes.
-- **Questions**: "what are my expenses this month?", "net income and the
-  6-month trend" — answers stream back; on the web the agent renders
-  charts/tables inline (generative UI).
-- **Imports**: Settings → upload a bank statement (CSV/XLSX/PDF); the agent
-  structures rows, duplicates are pre-skipped, you review and approve.
-- **WhatsApp**: send text or a receipt photo; same agent, plain-text replies
-  with the full breakdown, plus a weekly summary.
+Settings → WhatsApp → scan QR (WhatsApp → Settings → Linked devices → Link a
+device — scan within 20s). Once connected, open **"Message yourself"** on your
+phone and text the agent: `spent 23.50 at Metro groceries`, a receipt photo,
+or `what are my expenses this month?`. Approve other people's numbers under
+*Allowed senders*; everyone else gets silence.
 
 ## API surface
 
@@ -131,21 +74,23 @@ Open **Settings**:
 | `GET/POST/PATCH/DELETE /api/recurring` | recurring rules |
 | `POST /api/imports` · `GET /{id}` · `POST /{id}/approve` | statement imports |
 | `GET/POST/DELETE /api/chat/sessions` · `POST .../messages` (SSE) | chat sessions |
+| `GET/POST /api/settings/ocr` | OCR provider selection |
 | `GET /api/sync/status` · `POST /api/sync/now` | Google sync |
-| `GET/POST /api/whatsapp/accounts` · `DELETE /{id}` · `POST /{id}/refresh` | multi-account pairing, unpair, QR refresh |
-| `GET /api/whatsapp/qr` · `/status` | legacy first-account QR + state |
+| `GET/POST /api/whatsapp/accounts` · `DELETE /{id}` · `POST /{id}/refresh` | account pairing, unpair, QR refresh |
+| `GET/POST/DELETE /api/whatsapp/allowed` | sender allowlist |
 | `GET /api/google/auth` · `/callback` · `/status` | Google OAuth |
 | `GET /api/audit` | activity feed (writes + sync outcomes) |
 | `GET /api/health` | liveness |
 
-## Notes
+Errors always follow `{"error": {"code", "message"}}`.
 
-- All state lives in `api/data/` (or the `api-data` volume in Docker):
-  `expense.db` (SQLite), `receipts/` (images), WhatsApp session.
-- Periods: `2026-06`, `last3`, `last6`, `ytd`, `YYYY-MM-DD:YYYY-MM-DD`;
-  default is the current month.
-- The OCR model defaults to `baidu/paddleocr`; switch with `NVIDIA_OCR_MODEL`.
-- If OCR fails the receipt image is still saved and the agent asks you for
-  the missing details.
-- API errors always follow `{"error": {"code", "message"}}`.
-- Every transaction write and sync outcome lands in the audit log (Settings → Activity).
+## Periods
+
+`?period=` accepts `2026-06`, `last3`, `last6`, `ytd`,
+`YYYY-MM-DD:YYYY-MM-DD`; default = current month.
+
+## State
+
+Everything lives in `api/data/` (Docker: `api-data` volume): `expense.db`
+(SQLite), `receipts/` (images), `whatsapp/` (session DBs per account).
+`make cleanup` wipes it all — including WhatsApp pairing.
