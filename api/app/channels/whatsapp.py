@@ -28,6 +28,7 @@ import qrcode
 
 from ..config import config
 from ..errors import AppError
+from ..settings_keys import WHATSAPP_ALLOWED_SENDERS, WHATSAPP_SUMMARY_CHAT
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +239,7 @@ class WhatsAppManager:
 
         from ..db import get_db, get_setting, set_setting
         with get_db() as conn:
-            allowed = set(get_setting(conn, "whatsapp_allowed_senders") or [])
+            allowed = set(get_setting(conn, WHATSAPP_ALLOWED_SENDERS) or [])
 
         decision = should_process(
             is_from_me=source.IsFromMe, is_group=source.IsGroup,
@@ -267,7 +268,7 @@ class WhatsAppManager:
 
         self._reply_jids[chat_id] = chat_jid
         with get_db() as conn:
-            set_setting(conn, "whatsapp_summary_chat", chat_id)
+            set_setting(conn, WHATSAPP_SUMMARY_CHAT, chat_id)
 
         reply = await self._handler(chat_id, text, image_bytes, image_mime)
         if reply:
@@ -358,7 +359,7 @@ class WhatsAppRegistry:
         from ..db import get_db, get_setting
         from ..services.summary_text import weekly_summary_text
         with get_db() as conn:
-            chat_id = get_setting(conn, "whatsapp_summary_chat")
+            chat_id = get_setting(conn, WHATSAPP_SUMMARY_CHAT)
         if not chat_id:
             return
         for manager in self._managers.values():

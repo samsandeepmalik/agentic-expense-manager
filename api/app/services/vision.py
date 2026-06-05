@@ -16,6 +16,7 @@ import httpx
 
 from ..config import config
 from ..db import get_db, get_setting
+from ..settings_keys import OCR_PROVIDER
 from . import ocr
 
 PROVIDERS = ("nvidia", "claude", "openai")
@@ -37,7 +38,7 @@ class VisionError(RuntimeError):
 
 def current_provider() -> str:
     with get_db() as conn:
-        provider = get_setting(conn, "ocr_provider")
+        provider = get_setting(conn, OCR_PROVIDER)
     return provider if provider in PROVIDERS else DEFAULT_PROVIDER
 
 

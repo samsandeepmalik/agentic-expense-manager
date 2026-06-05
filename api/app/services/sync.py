@@ -12,6 +12,7 @@ import sqlite3
 from pathlib import Path
 
 from ..db import get_db, get_setting, set_setting
+from ..settings_keys import LAST_SYNC_ERROR, SPREADSHEET_ID
 from . import google_client as gc
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ def sync_enabled() -> bool:
 
 
 def _ensure_spreadsheet(conn: sqlite3.Connection) -> str:
-    spreadsheet_id = get_setting(conn, "spreadsheet_id")
+    spreadsheet_id = get_setting(conn, SPREADSHEET_ID)
     sheets = gc.sheets_service()
     if not spreadsheet_id:
         created = sheets.spreadsheets().create(
@@ -34,7 +35,7 @@ def _ensure_spreadsheet(conn: sqlite3.Connection) -> str:
                   "sheets": [{"properties": {"title": SHEET_NAME}}]},
             fields="spreadsheetId").execute()
         spreadsheet_id = created["spreadsheetId"]
-        set_setting(conn, "spreadsheet_id", spreadsheet_id)
+        set_setting(conn, SPREADSHEET_ID, spreadsheet_id)
         sheets.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id, range=f"{SHEET_NAME}!A1",
             valueInputOption="RAW", body={"values": [SHEET_HEADERS]}).execute()
@@ -158,7 +159,7 @@ def status() -> dict:
         pending = conn.execute(
             "SELECT COUNT(*) c FROM transactions WHERE sync_status='pending'"
         ).fetchone()["c"]
-        spreadsheet_id = get_setting(conn, "spreadsheet_id")
+        spreadsheet_id = get_setting(conn, SPREADSHEET_ID)
     return {"enabled": sync_enabled(), "pending": pending,
             "sheet_url": f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
                          if spreadsheet_id else None}

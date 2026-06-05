@@ -264,7 +264,7 @@ git commit -m "fix(web): poll dashboard/transactions so channel-originated write
 - Create: `api/app/settings_keys.py`
 - Modify: `api/app/services/google_client.py`, `api/app/services/sync.py`, `api/app/routes/whatsapp.py`, `api/app/channels/whatsapp.py`, `api/app/services/vision.py`, `api/app/routes/settings.py`
 
-- [ ] **Step 1: Create `api/app/settings_keys.py`**
+- [x] **Step 1: Create `api/app/settings_keys.py`**
 
 ```python
 """Single registry of settings-table keys. Never inline these strings."""
@@ -278,15 +278,15 @@ WHATSAPP_SUMMARY_CHAT = "whatsapp_summary_chat"
 LAST_SYNC_ERROR = "last_sync_error"
 ```
 
-- [ ] **Step 2: Replace literals.** In each file import `from ..settings_keys import ...` (or `from .settings_keys import ...` relative to location) and swap:
+- [x] **Step 2: Replace literals.** In each file import `from ..settings_keys import ...` (or `from .settings_keys import ...` relative to location) and swap:
   - `google_client.py`: `"google_tokens"` → `GOOGLE_TOKENS` (3 sites), `"drive_folder_id"` → `DRIVE_FOLDER_ID` (2 sites)
   - `sync.py`: `"spreadsheet_id"` → `SPREADSHEET_ID` (2 sites)
   - `routes/whatsapp.py`: `_ALLOWED_KEY = WHATSAPP_ALLOWED_SENDERS`
   - `channels/whatsapp.py`: `"whatsapp_allowed_senders"` → `WHATSAPP_ALLOWED_SENDERS`, `"whatsapp_summary_chat"` → `WHATSAPP_SUMMARY_CHAT` (2 sites — handler + registry summary)
   - `vision.py` + `routes/settings.py`: `"ocr_provider"` → `OCR_PROVIDER`
 
-- [ ] **Step 3: Run** — `poetry run pytest -v` → all PASS (pure rename)
-- [ ] **Step 4: Commit**
+- [x] **Step 3: Run** — `poetry run pytest -v` → all PASS (pure rename)
+- [x] **Step 4: Commit**
 
 ```bash
 git add api/app/settings_keys.py api/app/services/ api/app/routes/ api/app/channels/

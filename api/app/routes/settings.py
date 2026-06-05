@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from ..db import get_db, set_setting
 from ..errors import AppError
+from ..settings_keys import OCR_PROVIDER
 from ..services import vision
 
 router = APIRouter()
@@ -32,5 +33,5 @@ async def set_ocr(body: OcrIn):
         raise AppError("invalid_provider",
                        f"OCR provider must be one of {', '.join(vision.PROVIDERS)}")
     with get_db() as conn:
-        set_setting(conn, "ocr_provider", body.provider)
+        set_setting(conn, OCR_PROVIDER, body.provider)
     return _state()

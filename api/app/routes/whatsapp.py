@@ -9,10 +9,11 @@ from pydantic import BaseModel
 
 from ..channels.whatsapp import whatsapp
 from ..db import get_db, get_setting, set_setting
+from ..settings_keys import WHATSAPP_ALLOWED_SENDERS
 
 router = APIRouter()
 
-_ALLOWED_KEY = "whatsapp_allowed_senders"
+_ALLOWED_KEY = WHATSAPP_ALLOWED_SENDERS
 
 
 class AllowedIn(BaseModel):

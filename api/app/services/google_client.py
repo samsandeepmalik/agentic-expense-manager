@@ -18,6 +18,7 @@ from googleapiclient.http import MediaIoBaseUpload
 
 from ..config import config
 from ..db import get_db, get_setting, set_setting
+from ..settings_keys import DRIVE_FOLDER_ID, GOOGLE_TOKENS
 
 SCOPES = [
     "https://www.googleapis.com/auth/drive.file",
@@ -76,7 +77,7 @@ def exchange_code(code: str) -> None:
     flow.redirect_uri = config.google_redirect_uri
     flow.fetch_token(code=code)
     creds = flow.credentials
-    _write("google_tokens", _creds_to_dict(creds))
+    _write(GOOGLE_TOKENS, _creds_to_dict(creds))
 
 
 def _creds_to_dict(creds: Credentials) -> dict[str, Any]:
@@ -91,18 +92,18 @@ def _creds_to_dict(creds: Credentials) -> dict[str, Any]:
 
 
 def get_credentials() -> Credentials:
-    tokens = _read("google_tokens")
+    tokens = _read(GOOGLE_TOKENS)
     if not tokens:
         raise GoogleNotConnectedError()
     creds = Credentials(**tokens)
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
-        _write("google_tokens", _creds_to_dict(creds))
+        _write(GOOGLE_TOKENS, _creds_to_dict(creds))
     return creds
 
 
 def is_connected() -> bool:
-    return bool(_read("google_tokens"))
+    return bool(_read(GOOGLE_TOKENS))
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +125,7 @@ def sheets_service():
 
 
 def ensure_drive_folder() -> str:
-    folder_id = config.google_drive_folder_id or _read("drive_folder_id")
+    folder_id = config.google_drive_folder_id or _read(DRIVE_FOLDER_ID)
     if folder_id:
         return folder_id
 
@@ -141,7 +142,7 @@ def ensure_drive_folder() -> str:
         .execute()
     )
     folder_id = created["id"]
-    _write("drive_folder_id", folder_id)
+    _write(DRIVE_FOLDER_ID, folder_id)
     return folder_id
 
 
