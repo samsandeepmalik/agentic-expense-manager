@@ -1372,7 +1372,7 @@ git commit -m "feat(dedup): import duplicate matcher (total + date ±1d)"
 - Create: `api/app/routes/recurring.py`
 - Test: `api/tests/test_recurring.py`
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 `api/tests/test_recurring.py`:
 
@@ -1408,9 +1408,9 @@ def test_run_due_rules_records_and_advances(conn):
     assert svc.run_due_rules(conn, today=date(2026, 6, 5)) == 0
 ```
 
-- [ ] **Step 2: Run** → FAIL
+- [x] **Step 2: Run** → FAIL
 
-- [ ] **Step 3: Implement `api/app/services/recurring.py`**
+- [x] **Step 3: Implement `api/app/services/recurring.py`**
 
 ```python
 """Recurring transaction rules: auto-record on schedule."""
@@ -1492,9 +1492,9 @@ def run_due_rules(conn: sqlite3.Connection, today: date | None = None) -> int:
     return created
 ```
 
-- [ ] **Step 4: Run** → PASS
+- [x] **Step 4: Run** → PASS
 
-- [ ] **Step 5: Create `api/app/routes/recurring.py`**
+- [x] **Step 5: Create `api/app/routes/recurring.py`**
 
 ```python
 """Recurring rule configuration."""
@@ -1549,7 +1549,7 @@ async def delete_rule(rule_id: int):
     return {"ok": True}
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add api/app/services/recurring.py api/app/routes/recurring.py api/tests/test_recurring.py
