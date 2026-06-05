@@ -25,3 +25,9 @@ def test_settings_roundtrip(conn):
     db.set_setting(conn, "foo", {"a": 1})
     assert db.get_setting(conn, "foo") == {"a": 1}
     assert db.get_setting(conn, "missing") is None
+
+
+def test_connection_pragmas(conn):
+    assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
+    assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+    assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
