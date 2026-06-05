@@ -16,7 +16,7 @@ from .config import config
 from .db import init_db
 from .errors import register_error_handler
 from .routes import (categories, chat, dashboard, google_auth, imports,
-                     recurring, sync, transactions)
+                     recurring, settings, sync, transactions)
 from .routes import whatsapp as whatsapp_routes
 from .services.receipts import build_receipt_prompt
 
@@ -82,7 +82,7 @@ app.add_middleware(CORSMiddleware, allow_origins=[config.web_origin],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 for module in (chat, dashboard, transactions, categories, recurring,
-               imports, sync, whatsapp_routes, google_auth):
+               imports, settings, sync, whatsapp_routes, google_auth):
     app.include_router(module.router)
 
 

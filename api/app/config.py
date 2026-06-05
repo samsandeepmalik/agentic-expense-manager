@@ -29,6 +29,9 @@ class Config:
     nvidia_api_key: str = os.getenv("NVIDIA_API_KEY", "")
     nvidia_ocr_model: str = os.getenv("NVIDIA_OCR_MODEL", "baidu/paddleocr")
 
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    openai_vision_model: str = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini")
+
     google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
     google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
     google_redirect_uri: str = os.getenv(

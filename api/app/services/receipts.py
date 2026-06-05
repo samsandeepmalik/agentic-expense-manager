@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 
 from ..config import config
-from . import ocr
+from . import vision
 
 
 async def build_receipt_prompt(
@@ -21,7 +21,7 @@ async def build_receipt_prompt(
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     filename = f"receipt-{timestamp}-{uuid.uuid4().hex[:6]}.{extension}"
 
-    ocr_task = asyncio.create_task(ocr.extract_text(image_bytes, mime_type))
+    ocr_task = asyncio.create_task(vision.extract_text(image_bytes, mime_type))
 
     receipts_dir = config.data_dir / "receipts"
     receipts_dir.mkdir(parents=True, exist_ok=True)

@@ -39,6 +39,14 @@ export default function Settings() {
   const removeRule = useMutation({ mutationFn: (id: number) => del(`/api/recurring/${id}`),
     onSuccess: () => invalidate("recurring") });
 
+  // --- OCR provider ---
+  const ocr = useQuery({ queryKey: ["ocr"],
+    queryFn: () => get<{ provider: string; available: Record<string, boolean> }>(
+      "/api/settings/ocr") });
+  const setOcr = useMutation({
+    mutationFn: (provider: string) => post("/api/settings/ocr", { provider }),
+    onSuccess: () => invalidate("ocr") });
+
   // --- Connections ---
   const google = useQuery({ queryKey: ["google"],
     queryFn: () => get<{ configured: boolean; connected: boolean;
@@ -128,6 +136,25 @@ export default function Settings() {
             {r.frequency} · next {r.next_run}
             <button className="ghost" style={{ color: "var(--amber)" }}
                     onClick={() => removeRule.mutate(r.id)}>✕</button></p>))}
+      </Section>
+
+      <Section title="Receipt OCR">
+        <p className="muted">Which model reads text out of receipt photos.</p>
+        {([["nvidia", "NVIDIA PaddleOCR", "NVIDIA_API_KEY"],
+           ["claude", "Claude vision", "CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_API_KEY"],
+           ["openai", "OpenAI vision", "OPENAI_API_KEY"]] as const).map(
+          ([key, label, env]) => {
+            const configured = ocr.data?.available?.[key] ?? false;
+            return (
+              <label key={key} style={{ display: "block", marginTop: 8,
+                                        opacity: configured ? 1 : 0.55 }}>
+                <input type="radio" name="ocr" disabled={!configured}
+                       checked={ocr.data?.provider === key}
+                       onChange={() => setOcr.mutate(key)} />{" "}
+                <b>{label}</b>{" "}
+                {!configured && <span className="muted">set {env} in .env</span>}
+              </label>);
+          })}
       </Section>
 
       <Section title="Google sync">
