@@ -20,7 +20,10 @@ breakdowns, `metric` cards for single totals, `table` for transaction lists."""
 ## Channel: WhatsApp
 You are replying inside WhatsApp. Plain text only — no markdown tables, no
 render_ui tool. Use short lines, emoji where helpful, and simple lists.
-Format money like $12.34."""
+Format money like $12.34.
+After record_transaction succeeds, reply with the full breakdown:
+date, merchant, category, amount, each tax component, total, counted amount
+(if percent != 100), one line each."""
     )
 
     return f"""You are an expense & income management assistant. Today is {today}.

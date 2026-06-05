@@ -2443,7 +2443,7 @@ git commit -m "feat(imports): CSV/XLSX/PDF upload, agent parsing, dedup review, 
 - Create: `api/app/services/summary_text.py`
 - Modify: `api/app/channels/whatsapp.py` (handler-adjacent only), `api/app/agent/prompts.py` (WhatsApp section)
 
-- [ ] **Step 1: Implement `api/app/services/summary_text.py`**
+- [x] **Step 1: Implement `api/app/services/summary_text.py`**
 
 ```python
 """Plain-text summaries for WhatsApp."""
@@ -2471,7 +2471,7 @@ def weekly_summary_text() -> str:
     return "\n".join(lines)
 ```
 
-- [ ] **Step 2: WhatsApp prompt detail** — in `api/app/agent/prompts.py` WhatsApp section, append:
+- [x] **Step 2: WhatsApp prompt detail** — in `api/app/agent/prompts.py` WhatsApp section, append:
 
 ```
 After record_transaction succeeds, reply with the full breakdown:
@@ -2479,7 +2479,7 @@ date, merchant, category, amount, each tax component, total, counted amount
 (if percent != 100), one line each.
 ```
 
-- [ ] **Step 3: Weekly scheduler + chat memory of summary target** — in `api/app/channels/whatsapp.py`, inside `_handle_message` after `chat_id` is computed, persist the chat as summary target:
+- [x] **Step 3: Weekly scheduler + chat memory of summary target** — in `api/app/channels/whatsapp.py`, inside `_handle_message` after `chat_id` is computed, persist the chat as summary target:
 
 ```python
         from ..db import get_db, set_setting
@@ -2499,7 +2499,7 @@ Add a method to `WhatsAppManager`:
             await self.send(chat_id, weekly_summary_text())
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add api/app/services/summary_text.py api/app/channels/whatsapp.py api/app/agent/prompts.py

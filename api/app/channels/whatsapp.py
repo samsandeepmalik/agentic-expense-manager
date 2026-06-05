@@ -161,6 +161,10 @@ class WhatsAppManager:
         chat_id = Jid2String(JIDToNonAD(chat_jid))
         self._reply_jids[chat_id] = chat_jid
 
+        from ..db import get_db, set_setting
+        with get_db() as conn:
+            set_setting(conn, "whatsapp_summary_chat", chat_id)
+
         reply = await self._handler(chat_id, text, image_bytes, image_mime)
         if reply:
             await self._client.send_message(chat_jid, reply)
@@ -170,6 +174,14 @@ class WhatsAppManager:
         if jid is None or self._client is None:
             raise RuntimeError(f"No known WhatsApp chat: {chat_id}")
         await self._client.send_message(jid, text)
+
+    async def send_weekly_summary(self) -> None:
+        from ..db import get_db, get_setting
+        from ..services.summary_text import weekly_summary_text
+        with get_db() as conn:
+            chat_id = get_setting(conn, "whatsapp_summary_chat")
+        if chat_id and self.status == "connected" and chat_id in self._reply_jids:
+            await self.send(chat_id, weekly_summary_text())
 
 
 whatsapp = WhatsAppManager()
