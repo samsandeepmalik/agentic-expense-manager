@@ -339,7 +339,7 @@ git commit -m "feat(db): SQLite schema, seeds, settings store"
 - Create: `api/app/errors.py`
 - Test: `api/tests/test_api.py` (started here, grown in later tasks)
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 `api/tests/test_api.py`:
 
@@ -381,11 +381,11 @@ def test_unexpected_error_hidden():
     assert "secret" not in body["error"]["message"]
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd api && poetry run pytest tests/test_api.py -v` → FAIL (no `app.errors`)
 
-- [ ] **Step 3: Implement `api/app/errors.py`**
+- [x] **Step 3: Implement `api/app/errors.py`**
 
 ```python
 """Typed errors and the API error contract: {"error": {code, message}}."""
@@ -425,9 +425,9 @@ def register_error_handler(app: FastAPI) -> None:
         )
 ```
 
-- [ ] **Step 4: Run tests** — `poetry run pytest tests/test_api.py -v` → 2 PASS
+- [x] **Step 4: Run tests** — `poetry run pytest tests/test_api.py -v` → 2 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add api/app/errors.py api/tests/test_api.py
