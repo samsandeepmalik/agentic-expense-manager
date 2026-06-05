@@ -628,7 +628,7 @@ git commit -m "feat(periods): period param resolver"
 - Rewrite: `api/app/routes/categories.py`
 - Test: extend `api/tests/test_api.py`
 
-- [ ] **Step 1: Implement `api/app/services/categories.py`** (logic thin enough to test through API)
+- [x] **Step 1: Implement `api/app/services/categories.py`** (logic thin enough to test through API)
 
 ```python
 """Categories (+ percent, taxable, budget) and tax profiles."""
@@ -709,7 +709,7 @@ def save_tax_profile(conn, name: str, components: list[dict],
     return [p for p in list_tax_profiles(conn) if p["name"] == name.strip()][0]
 ```
 
-- [ ] **Step 2: Rewrite `api/app/routes/categories.py`**
+- [x] **Step 2: Rewrite `api/app/routes/categories.py`**
 
 ```python
 """Category + tax profile configuration endpoints."""
@@ -778,7 +778,7 @@ async def save_tax_profile(body: TaxProfileIn):
         )
 ```
 
-- [ ] **Step 3: Add API tests** (append to `api/tests/test_api.py`)
+- [x] **Step 3: Add API tests** (append to `api/tests/test_api.py`)
 
 ```python
 import pytest
@@ -823,8 +823,8 @@ def test_tax_profile_activate(client):
     assert len(active) == 1 and active[0]["name"] == "Ontario"
 ```
 
-- [ ] **Step 4: Run** — `poetry run pytest tests/test_api.py -v` → all PASS
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run** — `poetry run pytest tests/test_api.py -v` → all PASS
+- [x] **Step 5: Commit**
 
 ```bash
 git add api/app/services/categories.py api/app/routes/categories.py api/tests/test_api.py
