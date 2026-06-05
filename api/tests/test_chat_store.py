@@ -17,3 +17,11 @@ def test_session_lifecycle(conn):
 
     chat_store.delete_session(conn, session["id"])
     assert chat_store.list_sessions(conn) == []
+
+
+def test_list_sessions_channel_filter(conn):
+    ui = chat_store.create_session(conn, channel="ui")
+    wa = chat_store.ensure_session(conn, "wa:123@s.whatsapp.net", "whatsapp")
+    assert [s["id"] for s in chat_store.list_sessions(conn)] == [ui["id"]]
+    assert [s["id"] for s in chat_store.list_sessions(conn, channel="whatsapp")] == [wa["id"]]
+    assert len(chat_store.list_sessions(conn, channel=None)) == 2

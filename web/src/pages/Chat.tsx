@@ -8,6 +8,9 @@ export default function Chat() {
   const [active, setActive] = useState<string | null>(null);
   const sessions = useQuery({ queryKey: ["chat-sessions"],
     queryFn: () => get<ChatSession[]>("/api/chat/sessions") });
+  const waSessions = useQuery({ queryKey: ["wa-chat-sessions"], refetchInterval: 5000,
+    queryFn: () => get<ChatSession[]>("/api/chat/sessions?channel=whatsapp") });
+  const isWa = active?.startsWith("wa:") ?? false;
   const create = useMutation({
     mutationFn: () => post<ChatSession>("/api/chat/sessions"),
     onSuccess: (s) => {
@@ -36,9 +39,20 @@ export default function Chat() {
             <button className="ghost" style={{ color: "var(--amber)" }}
                     onClick={(e) => { e.stopPropagation(); remove.mutate(s.id); }}>✕</button>
           </div>))}
+        {(waSessions.data ?? []).length > 0 && (
+          <p className="muted" style={{ margin: "14px 0 2px" }}>WhatsApp</p>)}
+        {(waSessions.data ?? []).map((s) => (
+          <div key={s.id} onClick={() => setActive(s.id)}
+               style={{ padding: "10px 8px", borderRadius: 10, cursor: "pointer",
+                        marginTop: 6, display: "flex", gap: 6, alignItems: "center",
+                        background: active === s.id ? "var(--green-soft)" : "transparent" }}>
+            <span>💬</span>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis",
+                           whiteSpace: "nowrap" }}>{s.title}</span>
+          </div>))}
       </div>
       <div className="card" style={{ flex: 1 }}>
-        {active ? <ChatThread sessionId={active} />
+        {active ? <ChatThread key={active} sessionId={active} readOnly={isWa} />
           : <p className="muted" style={{ textAlign: "center", marginTop: 80 }}>
               Pick a chat or start a new one.</p>}
       </div>

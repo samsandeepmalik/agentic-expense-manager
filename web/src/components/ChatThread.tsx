@@ -6,8 +6,8 @@ import { GenUI } from "./GenUI";
 interface Item { role: "user" | "assistant"; text: string;
   uiSpecs?: UiSpec[]; tools?: string[]; }
 
-export function ChatThread({ sessionId, compact = false }:
-    { sessionId: string; compact?: boolean }) {
+export function ChatThread({ sessionId, compact = false, readOnly = false }:
+    { sessionId: string; compact?: boolean; readOnly?: boolean }) {
   const queryClient = useQueryClient();
   const [items, setItems] = useState<Item[]>([]);
   const [input, setInput] = useState("");
@@ -75,7 +75,10 @@ export function ChatThread({ sessionId, compact = false }:
             {(item.uiSpecs ?? []).map((spec, i) => <GenUI key={i} spec={spec} />)}
           </div>))}
       </div>
-      <div style={{ display: "flex", gap: 8, paddingTop: 10 }}>
+      {readOnly && (
+        <p className="muted" style={{ textAlign: "center", paddingTop: 8 }}>
+          WhatsApp conversation — reply from your phone.</p>)}
+      {!readOnly && <div style={{ display: "flex", gap: 8, paddingTop: 10 }}>
         <label style={{ cursor: "pointer", fontSize: 20, alignSelf: "center" }}>📷
           <input type="file" accept="image/*" hidden
                  onChange={(e) => setImage(e.target.files?.[0] ?? null)} /></label>
@@ -86,7 +89,7 @@ export function ChatThread({ sessionId, compact = false }:
                onKeyDown={(e) => e.key === "Enter" && send()} />
         <button className="primary" disabled={busy || (!input.trim() && !image)}
                 onClick={send}>{busy ? "…" : "Send"}</button>
-      </div>
+      </div>}
     </div>
   );
 }

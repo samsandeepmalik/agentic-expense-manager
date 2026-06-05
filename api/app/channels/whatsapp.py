@@ -236,11 +236,16 @@ class WhatsAppManager:
         with get_db() as conn:
             allowed = set(get_setting(conn, "whatsapp_allowed_senders") or [])
 
-        if not should_process(
-                is_from_me=source.IsFromMe, is_group=source.IsGroup,
-                chat_id=chat_id, own_chat_id=self._own_chat_id,
-                message_id=getattr(event.Info, "ID", ""),
-                sent_ids=self._sent_ids, allowed=allowed):
+        decision = should_process(
+            is_from_me=source.IsFromMe, is_group=source.IsGroup,
+            chat_id=chat_id, own_chat_id=self._own_chat_id,
+            message_id=getattr(event.Info, "ID", ""),
+            sent_ids=self._sent_ids, allowed=allowed)
+        logger.info(
+            "WhatsApp[%s] message chat=%s from_me=%s group=%s own_chat=%s -> %s",
+            self.id, chat_id, source.IsFromMe, source.IsGroup,
+            self._own_chat_id, "PROCESS" if decision else "ignore")
+        if not decision:
             return
 
         message = event.Message
@@ -264,6 +269,8 @@ class WhatsAppManager:
         if reply:
             response = await self._client.send_message(chat_jid, reply)
             self._remember_sent(response)
+            logger.info("WhatsApp[%s] replied in %s (%d chars)",
+                        self.id, chat_id, len(reply))
 
     def _remember_sent(self, response: Any) -> None:
         """Track our outbound message ids so should_process never loops."""

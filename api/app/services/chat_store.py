@@ -32,7 +32,10 @@ def ensure_session(conn, session_id: str, channel: str) -> dict:
     return get_session(conn, session_id)
 
 
-def list_sessions(conn, channel: str = "ui") -> list[dict]:
+def list_sessions(conn, channel: str | None = "ui") -> list[dict]:
+    if channel is None:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM chat_sessions ORDER BY updated_at DESC")]
     return [dict(r) for r in conn.execute(
         "SELECT * FROM chat_sessions WHERE channel=? ORDER BY updated_at DESC",
         (channel,))]

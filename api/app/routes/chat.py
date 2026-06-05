@@ -20,9 +20,9 @@ def _sse(payload: dict) -> str:
 
 
 @router.get("/api/chat/sessions")
-async def list_sessions():
+async def list_sessions(channel: str = "ui"):
     with get_db() as conn:
-        return chat_store.list_sessions(conn)
+        return chat_store.list_sessions(conn, channel=channel)
 
 
 @router.post("/api/chat/sessions")
