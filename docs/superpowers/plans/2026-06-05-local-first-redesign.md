@@ -3184,7 +3184,7 @@ git commit -m "feat(web): dashboard with metrics, quick-add, budgets rail, chart
 **Files:**
 - Replace: `web/src/pages/Transactions.tsx`
 
-- [ ] **Step 1: Implement**
+- [x] **Step 1: Implement**
 
 ```tsx
 import { useState } from "react";
@@ -3312,8 +3312,8 @@ export default function Transactions({ period }: { period: string }) {
 }
 ```
 
-- [ ] **Step 2: Build** — clean
-- [ ] **Step 3: Commit**
+- [x] **Step 2: Build** — clean
+- [x] **Step 3: Commit**
 
 ```bash
 git add web/src/pages/Transactions.tsx
