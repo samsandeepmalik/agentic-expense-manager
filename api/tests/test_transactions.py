@@ -54,3 +54,23 @@ def test_csv_export(conn):
     _create(conn)
     csv_text = svc.export_csv(conn)
     assert "Metro" in csv_text and csv_text.startswith("id,date,type")
+
+
+def test_dashboard_data_fresh_db_returns_zeros(conn):
+    data = svc.dashboard_data(conn, "2026-06")
+    assert data["metrics"] == {"income": 0.0, "expenses": 0.0, "net": 0.0, "count": 0}
+    assert data["recent"] == [] and isinstance(data["budgets"], list)
+
+
+def test_dashboard_data_aggregates(conn):
+    conn.execute("UPDATE categories SET budget_monthly=600 WHERE name='Groceries'")
+    _create(conn)                                   # expense 114.98 Groceries
+    _create(conn, type="income", category="Salary", total=5000.0)
+    data = svc.dashboard_data(conn, "2026-06")
+    assert data["metrics"]["income"] == 5000.0
+    assert data["metrics"]["expenses"] == 114.98
+    assert data["metrics"]["net"] == 4885.02
+    assert data["by_category"] == {"Groceries": 114.98}
+    groceries = [b for b in data["budgets"] if b["name"] == "Groceries"][0]
+    assert groceries["budget"] == 600 and groceries["spent"] == 114.98
+    assert len(data["trend"]) == 6 and data["trend"][-1]["month"] == "2026-06"

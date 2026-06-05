@@ -1191,7 +1191,7 @@ git commit -m "feat(transactions): SQLite CRUD, bulk ops, CSV, receipt serving"
 - Rewrite: `api/app/routes/dashboard.py`
 - Test: extend `api/tests/test_transactions.py`
 
-- [ ] **Step 1: Write failing test** (append to `test_transactions.py`)
+- [x] **Step 1: Write failing test** (append to `test_transactions.py`)
 
 ```python
 def test_dashboard_data_fresh_db_returns_zeros(conn):
@@ -1214,9 +1214,9 @@ def test_dashboard_data_aggregates(conn):
     assert len(data["trend"]) == 6 and data["trend"][-1]["month"] == "2026-06"
 ```
 
-- [ ] **Step 2: Run** → FAIL (no `dashboard_data`)
+- [x] **Step 2: Run** → FAIL (no `dashboard_data`)
 
-- [ ] **Step 3: Append to `api/app/services/transactions.py`**
+- [x] **Step 3: Append to `api/app/services/transactions.py`**
 
 ```python
 def dashboard_data(conn, period: str | None) -> dict:
@@ -1269,7 +1269,7 @@ def dashboard_data(conn, period: str | None) -> dict:
     }
 ```
 
-- [ ] **Step 4: Rewrite `api/app/routes/dashboard.py`**
+- [x] **Step 4: Rewrite `api/app/routes/dashboard.py`**
 
 ```python
 """Dashboard data — always renders; zeros on a fresh DB, never errors."""
@@ -1290,8 +1290,8 @@ async def dashboard(period: str | None = None):
         return dashboard_data(conn, period)
 ```
 
-- [ ] **Step 5: Run** — all PASS
-- [ ] **Step 6: Commit**
+- [x] **Step 5: Run** — all PASS
+- [x] **Step 6: Commit**
 
 ```bash
 git add api/app/services/transactions.py api/app/routes/dashboard.py api/tests/test_transactions.py

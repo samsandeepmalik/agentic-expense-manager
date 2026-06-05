@@ -135,3 +135,53 @@ def export_csv(conn) -> str:
                          json.dumps(txn["tax_breakdown"]), txn["total"],
                          txn["counted"], txn["source"]])
     return buffer.getvalue()
+
+
+def dashboard_data(conn, period: str | None) -> dict:
+    from datetime import date
+    from .periods import resolve_period, _shift_month, _month_bounds
+
+    start, end = resolve_period(period)
+    txns = list_transactions(conn, start=start, end=end, limit=100000)
+
+    income = round(sum(t["counted"] for t in txns if t["type"] == "income"), 2)
+    expenses = round(sum(t["counted"] for t in txns if t["type"] == "expense"), 2)
+
+    by_category: dict[str, float] = {}
+    for t in txns:
+        if t["type"] == "expense":
+            by_category[t["category"]] = round(by_category.get(t["category"], 0) + t["counted"], 2)
+
+    # Trend: 6 months ending at the period's end month
+    end_year, end_month = int(end[:4]), int(end[5:7])
+    trend = []
+    for delta in range(-5, 1):
+        year, month = _shift_month(end_year, end_month, delta)
+        month_start, month_end = _month_bounds(year, month)
+        month_txns = list_transactions(conn, start=month_start, end=month_end, limit=100000)
+        trend.append({
+            "month": f"{year:04d}-{month:02d}",
+            "income": round(sum(t["counted"] for t in month_txns if t["type"] == "income"), 2),
+            "expenses": round(sum(t["counted"] for t in month_txns if t["type"] == "expense"), 2),
+        })
+
+    budgets = []
+    for category in conn.execute(
+        "SELECT name, budget_monthly FROM categories "
+        "WHERE budget_monthly IS NOT NULL AND type='expense' ORDER BY name"
+    ):
+        spent = by_category.get(category["name"], 0.0)
+        budgets.append({"name": category["name"], "budget": category["budget_monthly"],
+                        "spent": spent,
+                        "pct": round(100 * spent / category["budget_monthly"], 1)
+                               if category["budget_monthly"] else 0})
+
+    return {
+        "period": {"start": start, "end": end},
+        "metrics": {"income": income, "expenses": expenses,
+                    "net": round(income - expenses, 2), "count": len(txns)},
+        "by_category": by_category,
+        "trend": trend,
+        "budgets": budgets,
+        "recent": txns[:20],
+    }
