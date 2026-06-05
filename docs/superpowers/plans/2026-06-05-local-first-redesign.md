@@ -2916,7 +2916,7 @@ git commit -m "feat(web): scaffold warm-theme shell, router, query, API client"
 - Replace: `web/src/pages/Dashboard.tsx`
 - Create: `web/src/components/QuickAdd.tsx`, `web/src/components/Charts.tsx`, `web/src/components/BudgetRail.tsx`, `web/src/components/RecentTable.tsx`, `web/src/components/Lightbox.tsx`
 
-- [ ] **Step 1: `web/src/components/Charts.tsx`**
+- [x] **Step 1: `web/src/components/Charts.tsx`**
 
 ```tsx
 import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart,
@@ -2956,7 +2956,7 @@ export function CategoryPie({ data }: { data: Record<string, number> }) {
 }
 ```
 
-- [ ] **Step 2: `web/src/components/QuickAdd.tsx`** — modal with live tax preview:
+- [x] **Step 2: `web/src/components/QuickAdd.tsx`** — modal with live tax preview:
 
 ```tsx
 import { useState } from "react";
@@ -3031,7 +3031,7 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
 }
 ```
 
-- [ ] **Step 3: `web/src/components/BudgetRail.tsx`**
+- [x] **Step 3: `web/src/components/BudgetRail.tsx`**
 
 ```tsx
 import type { Budget } from "../api";
@@ -3057,7 +3057,7 @@ export function BudgetRail({ budgets }: { budgets: Budget[] }) {
 }
 ```
 
-- [ ] **Step 4: `web/src/components/Lightbox.tsx` + `RecentTable.tsx`**
+- [x] **Step 4: `web/src/components/Lightbox.tsx` + `RecentTable.tsx`**
 
 ```tsx
 // Lightbox.tsx
@@ -3113,7 +3113,7 @@ export function RecentTable({ rows, title = "Recent transactions" }:
 }
 ```
 
-- [ ] **Step 5: Replace `web/src/pages/Dashboard.tsx`**
+- [x] **Step 5: Replace `web/src/pages/Dashboard.tsx`**
 
 ```tsx
 import { useState } from "react";
@@ -3169,8 +3169,8 @@ export default function Dashboard({ period }: { period: string }) {
 }
 ```
 
-- [ ] **Step 6: Build** — `npm run build` → clean
-- [ ] **Step 7: Commit**
+- [x] **Step 6: Build** — `npm run build` → clean
+- [x] **Step 7: Commit**
 
 ```bash
 git add web/src/
