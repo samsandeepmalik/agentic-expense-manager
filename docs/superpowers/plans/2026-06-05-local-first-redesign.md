@@ -3329,7 +3329,7 @@ git commit -m "feat(web): transactions page with edit, bulk ops, CSV, lightbox"
 - Create: `web/src/components/ChatThread.tsx`
 - Replace: `web/src/pages/Chat.tsx`, `web/src/components/ChatBubble.tsx`
 
-- [ ] **Step 1: Restore GenUI** — `git show $(git rev-list --max-parents=0 HEAD):web/src/components/GenUI.tsx > web/src/components/GenUI.tsx`, then update its `PALETTE` constant to `["#3a8f63", "#c2742c", "#7a9e7e", "#d9a85c", "#a08c6a", "#5e8ca7", "#b56a5d", "#8a7ba8"]` and the grid stroke colors `#2c3344`→`#efe9de`, axis `#8aa0b8`→`#a08c6a`. Fix the import line to `import type { UiComponentSpec, UiSpec } from "../api";` and add to `api.ts`:
+- [x] **Step 1: Restore GenUI** — `git show $(git rev-list --max-parents=0 HEAD):web/src/components/GenUI.tsx > web/src/components/GenUI.tsx`, then update its `PALETTE` constant to `["#3a8f63", "#c2742c", "#7a9e7e", "#d9a85c", "#a08c6a", "#5e8ca7", "#b56a5d", "#8a7ba8"]` and the grid stroke colors `#2c3344`→`#efe9de`, axis `#8aa0b8`→`#a08c6a`. Fix the import line to `import type { UiComponentSpec, UiSpec } from "../api";` and add to `api.ts`:
 
 ```typescript
 export interface UiComponentSpec { type: string; title?: string; label?: string;
@@ -3338,7 +3338,7 @@ export interface UiComponentSpec { type: string; title?: string; label?: string;
 ```
 (and change `UiSpec.components` to `UiComponentSpec[]`).
 
-- [ ] **Step 2: `web/src/components/ChatThread.tsx`** — reusable thread (page + bubble):
+- [x] **Step 2: `web/src/components/ChatThread.tsx`** — reusable thread (page + bubble):
 
 ```tsx
 import { useEffect, useRef, useState } from "react";
@@ -3435,7 +3435,7 @@ export function ChatThread({ sessionId, compact = false }:
 }
 ```
 
-- [ ] **Step 3: `web/src/pages/Chat.tsx`** — sessions sidebar:
+- [x] **Step 3: `web/src/pages/Chat.tsx`** — sessions sidebar:
 
 ```tsx
 import { useState } from "react";
@@ -3487,7 +3487,7 @@ export default function Chat() {
 }
 ```
 
-- [ ] **Step 4: `web/src/components/ChatBubble.tsx`** — floating quick chat:
+- [x] **Step 4: `web/src/components/ChatBubble.tsx`** — floating quick chat:
 
 ```tsx
 import { useState } from "react";
@@ -3522,8 +3522,8 @@ export function ChatBubble() {
 }
 ```
 
-- [ ] **Step 5: Build** — clean
-- [ ] **Step 6: Commit**
+- [x] **Step 5: Build** — clean
+- [x] **Step 6: Commit**
 
 ```bash
 git add web/src/
