@@ -527,7 +527,7 @@ git commit -m "feat(tax): back-calculation engine with active profile"
 - Create: `api/app/services/periods.py`
 - Test: `api/tests/test_periods.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 `api/tests/test_periods.py`:
 
@@ -564,9 +564,9 @@ def test_custom():
     assert resolve_period("2026-01-15:2026-03-10", TODAY) == ("2026-01-15", "2026-03-10")
 ```
 
-- [ ] **Step 2: Run** → FAIL
+- [x] **Step 2: Run** → FAIL
 
-- [ ] **Step 3: Implement `api/app/services/periods.py`**
+- [x] **Step 3: Implement `api/app/services/periods.py`**
 
 ```python
 """Resolve a period query param to an inclusive (start, end) ISO date range.
@@ -611,8 +611,8 @@ def resolve_period(period: str | None, today: date | None = None) -> tuple[str, 
     raise ValueError(f"Invalid period: {period}")
 ```
 
-- [ ] **Step 4: Run** — 6 PASS
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run** — 6 PASS
+- [x] **Step 5: Commit**
 
 ```bash
 git add api/app/services/periods.py api/tests/test_periods.py
