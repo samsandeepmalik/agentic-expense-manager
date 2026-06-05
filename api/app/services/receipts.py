@@ -1,6 +1,6 @@
 """Receipt intake pipeline shared by UI and WhatsApp channels.
 
-Image -> NVIDIA OCR text + Google Drive upload -> a composed prompt the agent
+Image -> NVIDIA OCR text + local image save -> a composed prompt the agent
 can act on (it then calls record_transaction with structured fields).
 """
 
@@ -10,7 +10,7 @@ import asyncio
 import uuid
 from datetime import datetime, timezone
 
-from . import google_client as gc
+from ..config import config
 from . import ocr
 
 
@@ -22,9 +22,11 @@ async def build_receipt_prompt(
     filename = f"receipt-{timestamp}-{uuid.uuid4().hex[:6]}.{extension}"
 
     ocr_task = asyncio.create_task(ocr.extract_text(image_bytes, mime_type))
-    upload_task = asyncio.create_task(
-        asyncio.to_thread(gc.upload_receipt_image, filename, image_bytes, mime_type)
-    )
+
+    receipts_dir = config.data_dir / "receipts"
+    receipts_dir.mkdir(parents=True, exist_ok=True)
+    image_path = receipts_dir / filename
+    image_path.write_bytes(image_bytes)
 
     # OCR failure degrades gracefully: the image is still stored and the agent
     # can ask the user for the missing details.
@@ -35,11 +37,9 @@ async def build_receipt_prompt(
         ocr_text = ""
         ocr_error = str(exc)
 
-    image_link = await upload_task
-
     parts = [
         "The user submitted a receipt image.",
-        f"Google Drive image link: {image_link}",
+        f"Saved receipt image path: {image_path}",
         "",
         "OCR-extracted text from the receipt:",
         "---",
@@ -49,7 +49,7 @@ async def build_receipt_prompt(
     if user_text.strip():
         parts.append(f'User note: "{user_text.strip()}"')
     parts.append(
-        "Extract the transaction details (date, merchant, amount, GST, QST, "
-        "total), choose a category, and record it with the image link."
+        "Extract the transaction details (date, merchant, total incl. taxes), "
+        "choose a category, and call record_transaction with image_path set."
     )
     return "\n".join(parts)

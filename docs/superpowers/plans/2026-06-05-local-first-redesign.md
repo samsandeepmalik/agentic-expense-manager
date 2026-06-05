@@ -1819,7 +1819,7 @@ git commit -m "feat(chat): persistent sessions with history replay"
 - Modify: `api/app/agent/prompts.py`
 - Modify: `api/app/services/receipts.py`
 
-- [ ] **Step 1: Rewrite `api/app/agent/tools.py`** — same factory shape (`build_tools(channel, ui_sink, source)`), same `_text_result` helper and `RENDER_UI_SCHEMA` (copy verbatim from current file). Replace the sheets-backed executors with SQLite and add two tools. Full executor section:
+- [x] **Step 1: Rewrite `api/app/agent/tools.py`** — same factory shape (`build_tools(channel, ui_sink, source)`), same `_text_result` helper and `RENDER_UI_SCHEMA` (copy verbatim from current file). Replace the sheets-backed executors with SQLite and add two tools. Full executor section:
 
 ```python
 from ..db import get_db
@@ -1927,7 +1927,7 @@ MANAGE_RECURRING_SCHEMA = {
 
 Register the two new `AgentTool` entries in the returned list (labels "Manage budgets", "Manage recurring"). Wrap every executor body in `try/except Exception as exc: return _text_result({"error": f"That didn't work: {exc}"})` — friendly degradation per spec §9.
 
-- [ ] **Step 2: Modify `api/app/services/receipts.py`** — save image locally instead of Drive (Drive moves to sync):
+- [x] **Step 2: Modify `api/app/services/receipts.py`** — save image locally instead of Drive (Drive moves to sync):
 
 Replace the upload_task block with:
 
@@ -1952,7 +1952,7 @@ and change the prompt assembly to pass `image_path` (string path) instead of Dri
 
 Remove the `google_client` import.
 
-- [ ] **Step 3: Modify `api/app/agent/prompts.py`** — update the recording instructions: user supplies total; taxes auto-derived server-side from category + active profile (the agent should NOT compute taxes); mention `manage_budgets` / `manage_recurring`; keep channel split. Replace the "## Recording transactions" + "## Category formulas" sections with:
+- [x] **Step 3: Modify `api/app/agent/prompts.py`** — update the recording instructions: user supplies total; taxes auto-derived server-side from category + active profile (the agent should NOT compute taxes); mention `manage_budgets` / `manage_recurring`; keep channel split. Replace the "## Recording transactions" + "## Category formulas" sections with:
 
 ```python
 ## Recording transactions
@@ -1968,7 +1968,7 @@ manage_budgets sets a monthly budget per category. manage_recurring creates
 rules (rent, salary) that auto-record on schedule.
 ```
 
-- [ ] **Step 4: Verify** — `poetry run pytest -v` and:
+- [x] **Step 4: Verify** — `poetry run pytest -v` and:
 
 ```bash
 poetry run python -c "
@@ -1978,7 +1978,7 @@ print([t.name for t in s.agent.state.tools])"
 ```
 Expected list includes `manage_budgets`, `manage_recurring`, `render_ui`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add api/app/agent/ api/app/services/receipts.py
