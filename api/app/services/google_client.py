@@ -1,7 +1,8 @@
 """Google OAuth, Drive and Sheets clients.
 
-All business state lives in Google: receipts in a Drive folder, transactions
-and categories in a spreadsheet. Tokens persist in the local JSON store.
+Google is an optional one-way sync target: receipts go to a Drive folder,
+transactions to a spreadsheet (see services/sync.py). Tokens persist in the
+SQLite settings table.
 """
 
 from __future__ import annotations
@@ -16,39 +17,24 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 from ..config import config
-from ..store import read_settings, write_settings
+from ..db import get_db, get_setting, set_setting
 
 SCOPES = [
     "https://www.googleapis.com/auth/drive.file",
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 
-SPREADSHEET_TITLE = "Expense Manager"
 DRIVE_FOLDER_NAME = "Expense Receipts"
 
-TRANSACTIONS_SHEET = "Transactions"
-CATEGORIES_SHEET = "Categories"
 
-TRANSACTION_HEADERS = [
-    "Date", "Type", "Category", "Description", "Merchant",
-    "Amount", "GST", "QST", "Total", "Counted Amount",
-    "Image Link", "Source", "Recorded At",
-]
-CATEGORY_HEADERS = ["Name", "Type", "Percent"]
+def _read(key):
+    with get_db() as conn:
+        return get_setting(conn, key)
 
-DEFAULT_CATEGORIES = [
-    ["Groceries", "expense", 100],
-    ["Dining", "expense", 100],
-    ["Transport", "expense", 100],
-    ["Utilities", "expense", 100],
-    ["Rent", "expense", 100],
-    ["Health", "expense", 100],
-    ["Entertainment", "expense", 100],
-    ["Other", "expense", 100],
-    ["Salary", "income", 100],
-    ["Business", "income", 100],
-    ["Other Income", "income", 100],
-]
+
+def _write(key, value):
+    with get_db() as conn:
+        set_setting(conn, key, value)
 
 
 class GoogleNotConnectedError(RuntimeError):
@@ -90,7 +76,7 @@ def exchange_code(code: str) -> None:
     flow.redirect_uri = config.google_redirect_uri
     flow.fetch_token(code=code)
     creds = flow.credentials
-    write_settings(google_tokens=_creds_to_dict(creds))
+    _write("google_tokens", _creds_to_dict(creds))
 
 
 def _creds_to_dict(creds: Credentials) -> dict[str, Any]:
@@ -105,18 +91,18 @@ def _creds_to_dict(creds: Credentials) -> dict[str, Any]:
 
 
 def get_credentials() -> Credentials:
-    tokens = read_settings().get("google_tokens")
+    tokens = _read("google_tokens")
     if not tokens:
         raise GoogleNotConnectedError()
     creds = Credentials(**tokens)
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
-        write_settings(google_tokens=_creds_to_dict(creds))
+        _write("google_tokens", _creds_to_dict(creds))
     return creds
 
 
 def is_connected() -> bool:
-    return bool(read_settings().get("google_tokens"))
+    return bool(_read("google_tokens"))
 
 
 # ---------------------------------------------------------------------------
@@ -133,13 +119,12 @@ def sheets_service():
 
 
 # ---------------------------------------------------------------------------
-# Bootstrap: spreadsheet + folder
+# Drive folder + upload
 # ---------------------------------------------------------------------------
 
 
 def ensure_drive_folder() -> str:
-    settings = read_settings()
-    folder_id = config.google_drive_folder_id or settings.get("drive_folder_id")
+    folder_id = config.google_drive_folder_id or _read("drive_folder_id")
     if folder_id:
         return folder_id
 
@@ -156,91 +141,8 @@ def ensure_drive_folder() -> str:
         .execute()
     )
     folder_id = created["id"]
-    write_settings(drive_folder_id=folder_id)
+    _write("drive_folder_id", folder_id)
     return folder_id
-
-
-def ensure_spreadsheet() -> str:
-    settings = read_settings()
-    spreadsheet_id = config.google_spreadsheet_id or settings.get("spreadsheet_id")
-    sheets = sheets_service()
-
-    if not spreadsheet_id:
-        created = (
-            sheets.spreadsheets()
-            .create(
-                body={
-                    "properties": {"title": SPREADSHEET_TITLE},
-                    "sheets": [
-                        {"properties": {"title": TRANSACTIONS_SHEET}},
-                        {"properties": {"title": CATEGORIES_SHEET}},
-                    ],
-                },
-                fields="spreadsheetId",
-            )
-            .execute()
-        )
-        spreadsheet_id = created["spreadsheetId"]
-        write_settings(spreadsheet_id=spreadsheet_id)
-
-    _ensure_headers(sheets, spreadsheet_id)
-    return spreadsheet_id
-
-
-def _ensure_headers(sheets, spreadsheet_id: str) -> None:
-    meta = sheets.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    existing_titles = {s["properties"]["title"] for s in meta.get("sheets", [])}
-
-    requests = []
-    for title in (TRANSACTIONS_SHEET, CATEGORIES_SHEET):
-        if title not in existing_titles:
-            requests.append({"addSheet": {"properties": {"title": title}}})
-    if requests:
-        sheets.spreadsheets().batchUpdate(
-            spreadsheetId=spreadsheet_id, body={"requests": requests}
-        ).execute()
-
-    # Headers
-    first_row = (
-        sheets.spreadsheets()
-        .values()
-        .get(spreadsheetId=spreadsheet_id, range=f"{TRANSACTIONS_SHEET}!A1:M1")
-        .execute()
-        .get("values", [])
-    )
-    if not first_row:
-        sheets.spreadsheets().values().update(
-            spreadsheetId=spreadsheet_id,
-            range=f"{TRANSACTIONS_SHEET}!A1",
-            valueInputOption="RAW",
-            body={"values": [TRANSACTION_HEADERS]},
-        ).execute()
-
-    cat_rows = (
-        sheets.spreadsheets()
-        .values()
-        .get(spreadsheetId=spreadsheet_id, range=f"{CATEGORIES_SHEET}!A1:C1")
-        .execute()
-        .get("values", [])
-    )
-    if not cat_rows:
-        sheets.spreadsheets().values().update(
-            spreadsheetId=spreadsheet_id,
-            range=f"{CATEGORIES_SHEET}!A1",
-            valueInputOption="RAW",
-            body={"values": [CATEGORY_HEADERS, *DEFAULT_CATEGORIES]},
-        ).execute()
-
-
-def spreadsheet_url() -> str | None:
-    settings = read_settings()
-    sid = config.google_spreadsheet_id or settings.get("spreadsheet_id")
-    return f"https://docs.google.com/spreadsheets/d/{sid}" if sid else None
-
-
-# ---------------------------------------------------------------------------
-# Drive upload
-# ---------------------------------------------------------------------------
 
 
 def upload_receipt_image(filename: str, data: bytes, mime_type: str) -> str:

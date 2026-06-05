@@ -1995,7 +1995,7 @@ git commit -m "feat(agent): SQLite-backed tools, budgets + recurring, local rece
 - Modify: `api/app/services/google_client.py`, `api/app/routes/google_auth.py`
 - Test: `api/tests/test_sync.py`
 
-- [ ] **Step 1: Modify `api/app/services/google_client.py`** — keep OAuth helpers (`build_auth_url`, `exchange_code`, `get_credentials`, `is_connected`, `drive_service`, `sheets_service`, `upload_receipt_image`, `ensure_drive_folder`) but store tokens in the settings table instead of `store.py`:
+- [x] **Step 1: Modify `api/app/services/google_client.py`** — keep OAuth helpers (`build_auth_url`, `exchange_code`, `get_credentials`, `is_connected`, `drive_service`, `sheets_service`, `upload_receipt_image`, `ensure_drive_folder`) but store tokens in the settings table instead of `store.py`:
 
 Replace `from ..store import read_settings, write_settings` with:
 
@@ -2015,7 +2015,7 @@ def _write(key, value):
 
 and swap usages: `read_settings().get("google_tokens")` → `_read("google_tokens")`; `write_settings(google_tokens=…)` → `_write("google_tokens", …)`; same for `drive_folder_id` / `spreadsheet_id`. Keep `ensure_spreadsheet` but its header row becomes the sync format (Step 2's `SHEET_HEADERS` imported from sync — to avoid a cycle, move spreadsheet bootstrap INTO `sync.py` and delete `ensure_spreadsheet`/`_ensure_headers` from google_client).
 
-- [ ] **Step 2: Implement `api/app/services/sync.py`**
+- [x] **Step 2: Implement `api/app/services/sync.py`**
 
 ```python
 """One-way sync: app SQLite → Google Sheet + Drive. Never reads data back.
@@ -2163,7 +2163,7 @@ def status() -> dict:
                          if spreadsheet_id else None}
 ```
 
-- [ ] **Step 3: Create `api/app/routes/sync.py`**
+- [x] **Step 3: Create `api/app/routes/sync.py`**
 
 ```python
 from __future__ import annotations
@@ -2187,7 +2187,7 @@ async def sync_now():
     return await asyncio.to_thread(svc.reconcile)
 ```
 
-- [ ] **Step 4: Modify `api/app/routes/google_auth.py`** — in `callback`, replace `ensure_spreadsheet`/`ensure_drive_folder` calls with a first reconcile:
+- [x] **Step 4: Modify `api/app/routes/google_auth.py`** — in `callback`, replace `ensure_spreadsheet`/`ensure_drive_folder` calls with a first reconcile:
 
 ```python
     await asyncio.to_thread(gc.exchange_code, code)
@@ -2198,7 +2198,7 @@ async def sync_now():
 
 In `status`, replace the `ensure_spreadsheet` readiness probe with `from ..services.sync import status as sync_status_fn` and return `{"configured": ..., "connected": gc.is_connected(), **sync_status_fn()}`.
 
-- [ ] **Step 5: Test reconcile idempotency with a fake sheets client**
+- [x] **Step 5: Test reconcile idempotency with a fake sheets client**
 
 `api/tests/test_sync.py`:
 
@@ -2240,8 +2240,8 @@ def test_reconcile_pushes_once(conn, db_path):
     assert second["synced"] == 0          # idempotent
 ```
 
-- [ ] **Step 6: Run** — `poetry run pytest tests/test_sync.py -v` → PASS
-- [ ] **Step 7: Commit**
+- [x] **Step 6: Run** — `poetry run pytest tests/test_sync.py -v` → PASS
+- [x] **Step 7: Commit**
 
 ```bash
 git add api/app/services/sync.py api/app/services/google_client.py api/app/routes/sync.py api/app/routes/google_auth.py api/tests/test_sync.py
