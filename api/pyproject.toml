@@ -16,10 +16,16 @@ dependencies = [
     "google-auth-oauthlib (>=1.2,<2.0)",
     "neonize (>=0.3,<1.0)",
     "qrcode (>=8.0,<9.0)",
+    "openpyxl (>=3.1,<4.0)",
+    "pypdf (>=5.0,<6.0)",
 ]
 
 [tool.poetry]
 package-mode = false
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pytest-asyncio = "^0.25"
 
 [build-system]
 requires = ["poetry-core>=2.0"]

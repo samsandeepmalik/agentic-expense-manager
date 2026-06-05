@@ -90,7 +90,7 @@ web/
 - Create: `api/tests/test_db.py`
 - Modify: `api/pyproject.toml` (add dev deps)
 
-- [ ] **Step 1: Add test deps**
+- [x] **Step 1: Add test deps**
 
 In `api/pyproject.toml` add to `[project]` dependencies: `"openpyxl (>=3.1,<4.0)", "pypdf (>=5.0,<6.0)"`, and a dev group:
 
@@ -102,7 +102,7 @@ pytest-asyncio = "^0.25"
 
 Run: `cd api && poetry lock && poetry install --no-root` — expect success.
 
-- [ ] **Step 2: Write failing test**
+- [x] **Step 2: Write failing test**
 
 `api/tests/conftest.py`:
 
@@ -166,12 +166,12 @@ def test_settings_roundtrip(conn):
     assert db.get_setting(conn, "missing") is None
 ```
 
-- [ ] **Step 3: Run to verify failure**
+- [x] **Step 3: Run to verify failure**
 
 Run: `cd api && poetry run pytest tests/test_db.py -v`
 Expected: FAIL (`ModuleNotFoundError: app.db`)
 
-- [ ] **Step 4: Implement `api/app/db.py`**
+- [x] **Step 4: Implement `api/app/db.py`**
 
 ```python
 """SQLite source of truth: connection, schema, seeds, settings helpers."""
@@ -319,12 +319,12 @@ def set_setting(conn, key: str, value: Any) -> None:
     )
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `cd api && poetry run pytest tests/test_db.py -v`
 Expected: 2 PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add api/app/db.py api/tests/ api/pyproject.toml api/poetry.lock
