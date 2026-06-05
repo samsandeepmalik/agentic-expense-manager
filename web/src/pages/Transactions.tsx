@@ -16,6 +16,7 @@ export default function Transactions({ period }: { period: string }) {
     queryFn: () => get<Category[]>("/api/categories") });
   const query = new URLSearchParams({ period, ...filters, limit: "200" });
   const txns = useQuery({ queryKey: ["transactions", period, filters],
+    refetchInterval: 15000,
     queryFn: () => get<Txn[]>(`/api/transactions?${query}`) });
 
   const refresh = () => {

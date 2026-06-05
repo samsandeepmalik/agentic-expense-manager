@@ -228,7 +228,7 @@ git commit -m "fix(sync): service-layer dirty flag + debounced worker closes age
 **Files:**
 - Modify: `web/src/pages/Dashboard.tsx`, `web/src/pages/Transactions.tsx`
 
-- [ ] **Step 1: Dashboard.** In `web/src/pages/Dashboard.tsx`, change the query:
+- [x] **Step 1: Dashboard.** In `web/src/pages/Dashboard.tsx`, change the query:
 
 ```tsx
   const { data, isLoading } = useQuery({
@@ -238,7 +238,7 @@ git commit -m "fix(sync): service-layer dirty flag + debounced worker closes age
   });
 ```
 
-- [ ] **Step 2: Transactions.** In `web/src/pages/Transactions.tsx`, change the list query:
+- [x] **Step 2: Transactions.** In `web/src/pages/Transactions.tsx`, change the list query:
 
 ```tsx
   const txns = useQuery({ queryKey: ["transactions", period, filters],
@@ -246,8 +246,8 @@ git commit -m "fix(sync): service-layer dirty flag + debounced worker closes age
     queryFn: () => get<Txn[]>(`/api/transactions?${query}`) });
 ```
 
-- [ ] **Step 3: Build** — `cd web && npm run build` → clean
-- [ ] **Step 4: Commit**
+- [x] **Step 3: Build** — `cd web && npm run build` → clean
+- [x] **Step 4: Commit**
 
 ```bash
 git add web/src/pages/Dashboard.tsx web/src/pages/Transactions.tsx

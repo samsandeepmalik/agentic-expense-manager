@@ -20,6 +20,7 @@ export default function Dashboard({ period }: { period: string }) {
   const [adding, setAdding] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard", period],
+    refetchInterval: 15000,
     queryFn: () => get<DashboardData>(`/api/dashboard?period=${period}`),
   });
   if (isLoading || !data) return <div className="card">Loading…</div>;
