@@ -8,6 +8,7 @@ import json
 import sqlite3
 
 from ..errors import AppError
+from . import audit
 from . import categories as cat_svc
 from . import tax as tax_svc
 
@@ -60,6 +61,9 @@ def create_transaction(conn: sqlite3.Connection, data: dict) -> dict:
     )
     row = conn.execute("SELECT * FROM transactions WHERE id=?", (cursor.lastrowid,)).fetchone()
     result = _row_to_dict(conn, row)
+    audit.record(conn, "transaction_created", channel=result["source"],
+                 ref=str(result["id"]),
+                 detail=f"{result['date']} {result['merchant']} ${result['total']}")
     _request_sync()
     return result
 
@@ -113,12 +117,15 @@ def update_transaction(conn, txn_id: int, changes: dict) -> dict:
          round(float(merged["total"]), 2), parts["counted"], txn_id),
     )
     result = get_transaction(conn, txn_id)
+    audit.record(conn, "transaction_updated", channel=result["source"],
+                 ref=str(txn_id), detail=f"total ${result['total']}")
     _request_sync()
     return result
 
 
 def delete_transaction(conn, txn_id: int) -> None:
     conn.execute("DELETE FROM transactions WHERE id=?", (txn_id,))
+    audit.record(conn, "transaction_deleted", ref=str(txn_id))
     _request_sync()
 
 

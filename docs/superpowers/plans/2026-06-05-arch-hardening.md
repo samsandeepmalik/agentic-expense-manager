@@ -418,7 +418,7 @@ git commit -m "refactor(google): settings table is the only source for sheet/fol
 - Create: `api/app/services/audit.py`
 - Test: `api/tests/test_audit.py`
 
-- [ ] **Step 1: Write failing tests** — `api/tests/test_audit.py`:
+- [x] **Step 1: Write failing tests** — `api/tests/test_audit.py`:
 
 ```python
 from app.services import audit, transactions as txn_svc
@@ -450,9 +450,9 @@ def test_sync_failure_recorded(conn, db_path, monkeypatch):
     assert "sheet quota" in (sync.status().get("last_error") or "")
 ```
 
-- [ ] **Step 2: Run** → FAIL (no `app.services.audit`)
+- [x] **Step 2: Run** → FAIL (no `app.services.audit`)
 
-- [ ] **Step 3: Table.** In `api/app/db.py` `SCHEMA`, append before the closing `"""`:
+- [x] **Step 3: Table.** In `api/app/db.py` `SCHEMA`, append before the closing `"""`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -465,7 +465,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 ```
 
-- [ ] **Step 4: Create `api/app/services/audit.py`**
+- [x] **Step 4: Create `api/app/services/audit.py`**
 
 ```python
 """Append-only audit log: which channel did what to which record."""
@@ -488,7 +488,7 @@ def recent(conn: sqlite3.Connection, limit: int = 100) -> list[dict]:
         "SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,))]
 ```
 
-- [ ] **Step 5: Hook transaction writes.** In `api/app/services/transactions.py` add import `from . import audit` and:
+- [x] **Step 5: Hook transaction writes.** In `api/app/services/transactions.py` add import `from . import audit` and:
 
 ```python
 # create_transaction tail becomes:
@@ -514,7 +514,7 @@ def delete_transaction(conn, txn_id: int) -> None:
     _request_sync()
 ```
 
-- [ ] **Step 6: Sync outcomes.** In `api/app/services/sync.py` replace `_safe_reconcile` and extend `status()`:
+- [x] **Step 6: Sync outcomes.** In `api/app/services/sync.py` replace `_safe_reconcile` and extend `status()`:
 
 ```python
 def _safe_reconcile() -> None:
@@ -545,8 +545,8 @@ def _safe_reconcile() -> None:
 
 (import `LAST_SYNC_ERROR` from `..settings_keys`.)
 
-- [ ] **Step 7: Run all** — `poetry run pytest -v` → PASS
-- [ ] **Step 8: Commit**
+- [x] **Step 7: Run all** — `poetry run pytest -v` → PASS
+- [x] **Step 8: Commit**
 
 ```bash
 git add api/app/db.py api/app/services/audit.py api/app/services/transactions.py api/app/services/sync.py api/tests/test_audit.py

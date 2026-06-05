@@ -148,10 +148,19 @@ async def sync_worker(debounce: float = 2.0) -> None:
 
 
 def _safe_reconcile() -> None:
+    from .audit import record
     try:
-        reconcile()
-    except Exception:  # noqa: BLE001
+        result = reconcile()
+        with get_db() as conn:
+            set_setting(conn, LAST_SYNC_ERROR, None)
+            if result.get("synced"):
+                record(conn, "sync_pushed", channel="sync",
+                       detail=f"{result['synced']} rows")
+    except Exception as exc:  # noqa: BLE001
         logger.exception("Sync push failed; will retry on next reconcile")
+        with get_db() as conn:
+            set_setting(conn, LAST_SYNC_ERROR, str(exc))
+            record(conn, "sync_failed", channel="sync", detail=str(exc))
 
 
 def status() -> dict:
@@ -160,6 +169,8 @@ def status() -> dict:
             "SELECT COUNT(*) c FROM transactions WHERE sync_status='pending'"
         ).fetchone()["c"]
         spreadsheet_id = get_setting(conn, SPREADSHEET_ID)
+        last_error = get_setting(conn, LAST_SYNC_ERROR)
     return {"enabled": sync_enabled(), "pending": pending,
+            "last_error": last_error,
             "sheet_url": f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
                          if spreadsheet_id else None}
