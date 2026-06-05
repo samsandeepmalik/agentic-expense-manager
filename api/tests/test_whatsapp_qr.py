@@ -144,3 +144,59 @@ def test_allowed_senders_api(db_path):
     assert added.json() == {"allowed": ["15145551234"]}            # normalized
     removed = client.delete("/api/whatsapp/allowed/15145551234")
     assert removed.json() == {"allowed": []}
+
+
+class FakeEventBus:
+    def __init__(self):
+        self.qr_callback = None
+        self.handlers = {}
+
+    def qr(self, callback):
+        self.qr_callback = callback
+
+    def __call__(self, event_type):
+        def decorate(fn):
+            self.handlers[event_type] = fn
+            return fn
+        return decorate
+
+
+class FakeClient:
+    def __init__(self):
+        self.event = FakeEventBus()
+        self.disconnected = False
+
+    async def connect(self):
+        return None
+
+    async def disconnect(self):
+        self.disconnected = True
+
+    async def logout(self):
+        return None
+
+    async def get_me(self):
+        raise RuntimeError("no identity in fake")
+
+
+@pytest.mark.asyncio
+async def test_real_start_path_with_injected_client(db_path):
+    fake = FakeClient()
+    manager = WhatsAppManager("t1", client_factory=lambda db: fake)
+    await manager.start()
+    assert fake.event.qr_callback is not None          # QR wiring registered
+    await fake.event.qr_callback(fake, b"qr-code-1")   # simulate neonize event
+    assert manager.current_qr()["status"] == "qr"
+
+    from neonize.events import ConnectedEv
+    await fake.event.handlers[ConnectedEv](fake, None)
+    assert manager.status == "connected"
+
+    await manager.stop()
+    assert fake.disconnected and manager.status == "disconnected"
+
+
+def test_whatsapp_registry_is_a_channel_registry():
+    from app.channels.base import BaseChannelRegistry
+    from app.channels.whatsapp import WhatsAppRegistry
+    assert issubclass(WhatsAppRegistry, BaseChannelRegistry)

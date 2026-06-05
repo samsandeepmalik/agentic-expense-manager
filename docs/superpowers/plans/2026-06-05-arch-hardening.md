@@ -674,7 +674,7 @@ git commit -m "feat(audit): /api/audit + Settings activity feed + sync error sur
 - Modify: `api/app/channels/whatsapp.py`
 - Test: `api/tests/test_whatsapp_qr.py` (extend)
 
-- [ ] **Step 1: Failing tests** (append to `api/tests/test_whatsapp_qr.py`):
+- [x] **Step 1: Failing tests** (append to `api/tests/test_whatsapp_qr.py`):
 
 ```python
 class FakeEventBus:
@@ -733,9 +733,9 @@ def test_whatsapp_registry_is_a_channel_registry():
     assert issubclass(WhatsAppRegistry, BaseChannelRegistry)
 ```
 
-- [ ] **Step 2: Run** → FAIL (`client_factory` unexpected kwarg; no `channels.base`)
+- [x] **Step 2: Run** → FAIL (`client_factory` unexpected kwarg; no `channels.base`)
 
-- [ ] **Step 3: Create `api/app/channels/base.py`**
+- [x] **Step 3: Create `api/app/channels/base.py`**
 
 ```python
 """Channel contract: what main.py and the scheduler may rely on.
@@ -773,7 +773,7 @@ class BaseChannelRegistry(ABC):
     async def send_weekly_summary(self) -> None: ...
 ```
 
-- [ ] **Step 4: Implement in `api/app/channels/whatsapp.py`:**
+- [x] **Step 4: Implement in `api/app/channels/whatsapp.py`:**
   - Replace the local `MessageHandler` definition with `from .base import BaseChannelRegistry, MessageHandler` (delete the local `MessageHandler = ...` line and the now-unused `Awaitable, Callable` names from the `collections.abc` import).
   - `WhatsAppManager.__init__` signature becomes:
 
@@ -796,8 +796,8 @@ class BaseChannelRegistry(ABC):
   - Class header: `class WhatsAppRegistry(BaseChannelRegistry):` and add `name = "whatsapp"` as first class attribute.
   - `WhatsAppRegistry._add` passes nothing new (managers it creates use the real client).
 
-- [ ] **Step 5: Run** — `poetry run pytest tests/test_whatsapp_qr.py -v` → PASS (all old tests + 2 new)
-- [ ] **Step 6: Commit**
+- [x] **Step 5: Run** — `poetry run pytest tests/test_whatsapp_qr.py -v` → PASS (all old tests + 2 new)
+- [x] **Step 6: Commit**
 
 ```bash
 git add api/app/channels/base.py api/app/channels/whatsapp.py api/tests/test_whatsapp_qr.py

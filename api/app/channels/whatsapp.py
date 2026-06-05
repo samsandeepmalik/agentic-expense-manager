@@ -20,7 +20,7 @@ import re
 import time
 import uuid
 from collections import deque
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -29,11 +29,9 @@ import qrcode
 from ..config import config
 from ..errors import AppError
 from ..settings_keys import WHATSAPP_ALLOWED_SENDERS, WHATSAPP_SUMMARY_CHAT
+from .base import BaseChannelRegistry, MessageHandler
 
 logger = logging.getLogger(__name__)
-
-# handler(chat_id, text, image_bytes, image_mime) -> reply text
-MessageHandler = Callable[[str, str, bytes | None, str | None], Awaitable[str]]
 
 _QR_CODE_TTL_SECONDS = 20
 
@@ -69,9 +67,11 @@ class WhatsAppManager:
     """One paired WhatsApp account: neonize client + session DB + QR state."""
 
     def __init__(self, account_id: str = "default",
-                 db_path: Path | None = None) -> None:
+                 db_path: Path | None = None,
+                 client_factory: Callable[[str], Any] | None = None) -> None:
         self.id = account_id
         self._db_path = db_path or (config.data_dir / "whatsapp.sqlite3")
+        self._client_factory = client_factory
         self.device: str = ""
         self.status: str = "disconnected"  # disconnected | qr | connected
         self._qr_codes: list[str] = []
@@ -104,7 +104,10 @@ class WhatsAppManager:
             PairStatusEv,
         )
 
-        client = NewAClient(str(self._db_path))
+        if self._client_factory is not None:
+            client = self._client_factory(str(self._db_path))
+        else:
+            client = NewAClient(str(self._db_path))
         self._client = client
 
         # neonize delivers each rotating QR code (valid ~20s) via a dedicated
@@ -291,8 +294,10 @@ class WhatsAppManager:
         self._remember_sent(response)
 
 
-class WhatsAppRegistry:
+class WhatsAppRegistry(BaseChannelRegistry):
     """All paired WhatsApp accounts. Session DBs live in data_dir/whatsapp/."""
+
+    name = "whatsapp"
 
     def __init__(self) -> None:
         self._managers: dict[str, WhatsAppManager] = {}
