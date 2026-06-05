@@ -1,0 +1,26 @@
+[project]
+name = "expense-api"
+version = "0.1.0"
+description = "Income & expense management backend — Pi agent, Google Sheets/Drive, WhatsApp, NVIDIA OCR"
+requires-python = ">=3.13,<3.14"
+authors = [{ name = "Sandeep Malik" }]
+dependencies = [
+    "fastapi (>=0.115,<1.0)",
+    "uvicorn[standard] (>=0.34,<1.0)",
+    "pi-agent (>=0.1.0,<0.2.0)",
+    "openai (>=1.60,<2.0)",
+    "httpx (>=0.28,<1.0)",
+    "python-dotenv (>=1.0,<2.0)",
+    "python-multipart (>=0.0.20,<1.0)",
+    "google-api-python-client (>=2.150,<3.0)",
+    "google-auth-oauthlib (>=1.2,<2.0)",
+    "neonize (>=0.3,<1.0)",
+    "qrcode (>=8.0,<9.0)",
+]
+
+[tool.poetry]
+package-mode = false
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"

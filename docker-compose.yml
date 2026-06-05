@@ -1,0 +1,27 @@
+services:
+  api:
+    build: ./api
+    env_file: .env
+    environment:
+      - DATA_DIR=/data
+      - WEB_ORIGIN=http://localhost:5173
+    ports:
+      - "8000:8000"
+    volumes:
+      - api-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: ./web
+    ports:
+      - "5173:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  api-data:
