@@ -2256,7 +2256,7 @@ git commit -m "feat(sync): one-way Google sheet/Drive sync with idempotent recon
 - Create: `api/app/services/imports.py`
 - Create: `api/app/routes/imports.py`
 
-- [ ] **Step 1: Implement `api/app/services/imports.py`**
+- [x] **Step 1: Implement `api/app/services/imports.py`**
 
 ```python
 """Statement/sheet imports: extract text, agent structures rows, dedup, approve."""
@@ -2385,7 +2385,7 @@ def approve_import(import_id: int, indexes: list[int] | None) -> dict:
     return {"created": created}
 ```
 
-- [ ] **Step 2: Create `api/app/routes/imports.py`**
+- [x] **Step 2: Create `api/app/routes/imports.py`**
 
 ```python
 from __future__ import annotations
@@ -2418,7 +2418,7 @@ async def approve(import_id: int, body: ApproveIn):
     return svc.approve_import(import_id, body.indexes)
 ```
 
-- [ ] **Step 3: Verify imports compile + extract_text works**
+- [x] **Step 3: Verify imports compile + extract_text works**
 
 ```bash
 cd api && poetry run python -c "
@@ -2428,7 +2428,7 @@ assert 'METRO' in csv_text
 print('EXTRACT_OK')"
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add api/app/services/imports.py api/app/routes/imports.py
