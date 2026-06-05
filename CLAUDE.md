@@ -11,9 +11,20 @@ Deep dives: `docs/architecture.md` (diagrams) · `docs/development.md`.
 ```bash
 cd api && poetry run pytest -v     # backend tests — run after every backend change
 cd web && npm run build            # tsc + vite — run after every frontend change
-make start | stop | logs-api       # Docker stack (web :5173, api :8000)
-cd api && poetry run uvicorn app.main:app --reload --port 8000   # dev api
-cd web && npm run dev              # dev web (proxies /api → :8000)
+
+# Makefile (Docker stack: web :5173, api :8000)
+make start      # build + start containers (the default way to run the app)
+make stop       # stop containers, keep state (DB, WhatsApp session)
+make restart    # stop + start
+make status     # container status
+make logs       # follow all logs   (also: logs-api, logs-web)
+make cleanup    # DESTRUCTIVE: remove containers + volumes (wipes DB + WhatsApp pairing)
+make dev-api    # local api with hot reload (no Docker)
+make dev-web    # local web dev server (no Docker; proxies /api → :8000)
+
+# Local dev without make
+cd api && poetry install --no-root && poetry run uvicorn app.main:app --reload --port 8000
+cd web && npm install && npm run dev
 ```
 
 Never commit on red. TDD: failing test first.
