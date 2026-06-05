@@ -43,13 +43,15 @@ def _digits(value: str) -> str:
 
 
 def should_process(*, is_from_me: bool, is_group: bool, chat_id: str,
-                   own_chat_id: str | None, message_id: str,
+                   sender_id: str, own_chat_id: str | None, message_id: str,
                    sent_ids, allowed: set[str]) -> bool:
     """Gate incoming messages (OpenClaw-style):
 
     - groups: never
     - our own outbound replies (tracked by message id): never — no loops
-    - from-me messages: only in the owner's self-chat ("Message yourself")
+    - from-me messages: only in the owner's self-chat ("Message yourself").
+      Self-chat = chat and sender are the same identity (covers WhatsApp's
+      hidden @lid form, which differs from the phone-number JID).
     - from others: only if the sender is on the allowlist
     """
     if is_group:
@@ -57,7 +59,8 @@ def should_process(*, is_from_me: bool, is_group: bool, chat_id: str,
     if message_id and message_id in sent_ids:
         return False
     if is_from_me:
-        return own_chat_id is not None and chat_id == own_chat_id
+        return chat_id == sender_id or (own_chat_id is not None
+                                        and chat_id == own_chat_id)
     return _digits(chat_id) in {_digits(a) for a in allowed}
 
 
@@ -231,6 +234,7 @@ class WhatsAppManager:
 
         chat_jid = source.Chat
         chat_id = Jid2String(JIDToNonAD(chat_jid))
+        sender_id = Jid2String(JIDToNonAD(source.Sender))
 
         from ..db import get_db, get_setting, set_setting
         with get_db() as conn:
@@ -238,13 +242,13 @@ class WhatsAppManager:
 
         decision = should_process(
             is_from_me=source.IsFromMe, is_group=source.IsGroup,
-            chat_id=chat_id, own_chat_id=self._own_chat_id,
+            chat_id=chat_id, sender_id=sender_id, own_chat_id=self._own_chat_id,
             message_id=getattr(event.Info, "ID", ""),
             sent_ids=self._sent_ids, allowed=allowed)
         logger.info(
-            "WhatsApp[%s] message chat=%s from_me=%s group=%s own_chat=%s -> %s",
-            self.id, chat_id, source.IsFromMe, source.IsGroup,
-            self._own_chat_id, "PROCESS" if decision else "ignore")
+            "WhatsApp[%s] message chat=%s sender=%s from_me=%s group=%s -> %s",
+            self.id, chat_id, sender_id, source.IsFromMe, source.IsGroup,
+            "PROCESS" if decision else "ignore")
         if not decision:
             return
 

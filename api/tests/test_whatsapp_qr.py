@@ -106,17 +106,25 @@ def test_should_process_rules():
     from app.channels.whatsapp import should_process
     base = dict(is_from_me=False, is_group=False,
                 chat_id="15145551234@s.whatsapp.net",
+                sender_id="15145551234@s.whatsapp.net",
                 own_chat_id="14387257870@s.whatsapp.net", message_id="m1",
                 sent_ids=set(), allowed={"15145551234"})
     assert should_process(**base)                                  # allowed sender
     assert not should_process(**{**base, "allowed": set()})        # stranger → silent
     assert not should_process(**{**base, "is_group": True})        # groups ignored
     self_chat = {**base, "is_from_me": True,
-                 "chat_id": "14387257870@s.whatsapp.net", "allowed": set()}
+                 "chat_id": "14387257870@s.whatsapp.net",
+                 "sender_id": "14387257870@s.whatsapp.net", "allowed": set()}
     assert should_process(**self_chat)                             # self-chat works
+    # WhatsApp hidden-id form: chat and sender both your @lid → self-chat
+    lid = {**self_chat, "chat_id": "259579250241641@lid",
+           "sender_id": "259579250241641@lid"}
+    assert should_process(**lid)
     assert not should_process(**{**self_chat, "message_id": "m9",
                                  "sent_ids": {"m9"}})              # own reply → no loop
-    assert not should_process(**{**base, "is_from_me": True})      # from-me elsewhere
+    # from-me in someone else's chat (chat = them, sender = me) → skip
+    assert not should_process(**{**base, "is_from_me": True,
+                                 "sender_id": "14387257870@s.whatsapp.net"})
 
 
 def test_allowed_senders_api(db_path):
