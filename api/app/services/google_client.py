@@ -125,7 +125,7 @@ def sheets_service():
 
 
 def ensure_drive_folder() -> str:
-    folder_id = config.google_drive_folder_id or _read(DRIVE_FOLDER_ID)
+    folder_id = _read(DRIVE_FOLDER_ID)
     if folder_id:
         return folder_id
 

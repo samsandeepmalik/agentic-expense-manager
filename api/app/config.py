@@ -37,8 +37,6 @@ class Config:
     google_redirect_uri: str = os.getenv(
         "GOOGLE_REDIRECT_URI", "http://localhost:8000/api/google/callback"
     )
-    google_spreadsheet_id: str = os.getenv("GOOGLE_SPREADSHEET_ID", "")
-    google_drive_folder_id: str = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
 
     # Runtime state: google tokens, whatsapp session, settings
     data_dir: Path = Path(os.getenv("DATA_DIR", str(_HERE / "data")))

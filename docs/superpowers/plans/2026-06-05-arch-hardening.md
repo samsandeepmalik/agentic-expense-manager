@@ -386,21 +386,21 @@ git commit -m "refactor(sync): receipt_link is a transactions column; migrate ju
 **Files:**
 - Modify: `api/app/config.py`, `api/app/services/google_client.py`
 
-- [ ] **Step 1: Drop the env duplicates.** In `api/app/config.py` delete:
+- [x] **Step 1: Drop the env duplicates.** In `api/app/config.py` delete:
 
 ```python
     google_spreadsheet_id: str = os.getenv("GOOGLE_SPREADSHEET_ID", "")
     google_drive_folder_id: str = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
 ```
 
-- [ ] **Step 2: DB-authoritative folder id.** In `api/app/services/google_client.py` `ensure_drive_folder()` change the first lookup to:
+- [x] **Step 2: DB-authoritative folder id.** In `api/app/services/google_client.py` `ensure_drive_folder()` change the first lookup to:
 
 ```python
     folder_id = _read(DRIVE_FOLDER_ID)
 ```
 
-- [ ] **Step 3: Verify** — `poetry run pytest -v` and `grep -rn "google_spreadsheet_id\|google_drive_folder_id" api/app/ || echo CLEAN` → CLEAN
-- [ ] **Step 4: Commit**
+- [x] **Step 3: Verify** — `poetry run pytest -v` and `grep -rn "google_spreadsheet_id\|google_drive_folder_id" api/app/ || echo CLEAN` → CLEAN
+- [x] **Step 4: Commit**
 
 ```bash
 git add api/app/config.py api/app/services/google_client.py
