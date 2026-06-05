@@ -53,6 +53,15 @@ export default function Settings() {
   const removeWa = useMutation({
     mutationFn: (id: string) => del(`/api/whatsapp/accounts/${id}`),
     onSuccess: () => invalidate("whatsapp") });
+  const allowed = useQuery({ queryKey: ["wa-allowed"],
+    queryFn: () => get<{ allowed: string[] }>("/api/whatsapp/allowed") });
+  const [newSender, setNewSender] = useState("");
+  const addAllowed = useMutation({
+    mutationFn: (number: string) => post("/api/whatsapp/allowed", { number }),
+    onSuccess: () => { setNewSender(""); invalidate("wa-allowed"); } });
+  const removeAllowed = useMutation({
+    mutationFn: (number: string) => del(`/api/whatsapp/allowed/${number}`),
+    onSuccess: () => invalidate("wa-allowed") });
   const syncNow = useMutation({ mutationFn: () => post("/api/sync/now"),
     onSuccess: () => invalidate("google") });
 
@@ -155,7 +164,8 @@ export default function Settings() {
             </div>
             {a.status === "connected" && (
               <p className="muted" style={{ margin: "6px 0 0 19px" }}>
-                Message the linked account to chat with the agent.</p>)}
+                Self-chat is on — open WhatsApp, search your own name and use
+                “Message yourself” to talk to the agent.</p>)}
             {a.qr && (
               <div style={{ margin: "8px 0 0 19px" }}>
                 <p style={{ margin: "0 0 6px" }}>
@@ -172,6 +182,26 @@ export default function Settings() {
         <button className="primary" style={{ marginTop: 12 }}
                 disabled={addWa.isPending} onClick={() => addWa.mutate()}>
           ＋ Pair another account</button>
+
+        <div style={{ marginTop: 18, borderTop: "1px solid #f4efe7", paddingTop: 12 }}>
+          <b>Allowed senders</b>
+          <p className="muted" style={{ margin: "4px 0 8px" }}>
+            Other numbers that may talk to the agent by messaging your WhatsApp.
+            Everyone else is ignored.</p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {(allowed.data?.allowed ?? []).map((n) => (
+              <span key={n} className="tag income">+{n}{" "}
+                <button className="ghost" style={{ color: "var(--amber)", padding: 0 }}
+                        onClick={() => removeAllowed.mutate(n)}>✕</button></span>))}
+            <input placeholder="+1 514 555 1234" value={newSender}
+                   style={{ width: 160 }}
+                   onChange={(e) => setNewSender(e.target.value)}
+                   onKeyDown={(e) => e.key === "Enter" && newSender.trim()
+                     && addAllowed.mutate(newSender)} />
+            <button className="ghost" disabled={!newSender.trim() || addAllowed.isPending}
+                    onClick={() => addAllowed.mutate(newSender)}>＋ Allow</button>
+          </div>
+        </div>
       </Section>
 
       <Section title="Import statements & sheets"><ImportReview /></Section>

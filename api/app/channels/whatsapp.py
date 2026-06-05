@@ -16,8 +16,10 @@ import asyncio
 import base64
 import io
 import logging
+import re
 import time
 import uuid
+from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -35,6 +37,30 @@ MessageHandler = Callable[[str, str, bytes | None, str | None], Awaitable[str]]
 _QR_CODE_TTL_SECONDS = 20
 
 
+def _digits(value: str) -> str:
+    """Normalize a chat id / phone number to bare digits for comparison."""
+    return re.sub(r"\D", "", value.split("@")[0])
+
+
+def should_process(*, is_from_me: bool, is_group: bool, chat_id: str,
+                   own_chat_id: str | None, message_id: str,
+                   sent_ids, allowed: set[str]) -> bool:
+    """Gate incoming messages (OpenClaw-style):
+
+    - groups: never
+    - our own outbound replies (tracked by message id): never — no loops
+    - from-me messages: only in the owner's self-chat ("Message yourself")
+    - from others: only if the sender is on the allowlist
+    """
+    if is_group:
+        return False
+    if message_id and message_id in sent_ids:
+        return False
+    if is_from_me:
+        return own_chat_id is not None and chat_id == own_chat_id
+    return _digits(chat_id) in {_digits(a) for a in allowed}
+
+
 class WhatsAppManager:
     """One paired WhatsApp account: neonize client + session DB + QR state."""
 
@@ -50,6 +76,8 @@ class WhatsAppManager:
         self._connect_task: asyncio.Task | None = None
         self._handler: MessageHandler | None = None
         self._reply_jids: dict[str, Any] = {}
+        self._own_chat_id: str | None = None
+        self._sent_ids: deque[str] = deque(maxlen=256)
 
     def set_handler(self, handler: MessageHandler) -> None:
         self._handler = handler
@@ -96,6 +124,9 @@ class WhatsAppManager:
                 number = getattr(jid, "User", "") if jid is not None else ""
                 self.device = (getattr(me, "PushName", "")
                                or (f"+{number}" if number else ""))
+                if jid is not None:
+                    from neonize.utils.jid import Jid2String, JIDToNonAD
+                    self._own_chat_id = Jid2String(JIDToNonAD(jid))
             except Exception:  # noqa: BLE001 — cosmetic only
                 self.device = ""
             logger.info("WhatsApp[%s] connected", self.id)
@@ -192,10 +223,24 @@ class WhatsAppManager:
     # ------------------------------------------------------------------
 
     async def _handle_message(self, event: Any) -> None:
-        source = event.Info.MessageSource
-        if source.IsFromMe or source.IsGroup:
-            return
         if self._handler is None:
+            return
+        source = event.Info.MessageSource
+
+        from neonize.utils.jid import Jid2String, JIDToNonAD
+
+        chat_jid = source.Chat
+        chat_id = Jid2String(JIDToNonAD(chat_jid))
+
+        from ..db import get_db, get_setting, set_setting
+        with get_db() as conn:
+            allowed = set(get_setting(conn, "whatsapp_allowed_senders") or [])
+
+        if not should_process(
+                is_from_me=source.IsFromMe, is_group=source.IsGroup,
+                chat_id=chat_id, own_chat_id=self._own_chat_id,
+                message_id=getattr(event.Info, "ID", ""),
+                sent_ids=self._sent_ids, allowed=allowed):
             return
 
         message = event.Message
@@ -211,25 +256,27 @@ class WhatsAppManager:
         if not text and not image_bytes:
             return
 
-        from neonize.utils.jid import Jid2String, JIDToNonAD
-
-        chat_jid = source.Chat
-        chat_id = Jid2String(JIDToNonAD(chat_jid))
         self._reply_jids[chat_id] = chat_jid
-
-        from ..db import get_db, set_setting
         with get_db() as conn:
             set_setting(conn, "whatsapp_summary_chat", chat_id)
 
         reply = await self._handler(chat_id, text, image_bytes, image_mime)
         if reply:
-            await self._client.send_message(chat_jid, reply)
+            response = await self._client.send_message(chat_jid, reply)
+            self._remember_sent(response)
+
+    def _remember_sent(self, response: Any) -> None:
+        """Track our outbound message ids so should_process never loops."""
+        message_id = getattr(response, "ID", "")
+        if message_id:
+            self._sent_ids.append(message_id)
 
     async def send(self, chat_id: str, text: str) -> None:
         jid = self._reply_jids.get(chat_id)
         if jid is None or self._client is None:
             raise RuntimeError(f"No known WhatsApp chat: {chat_id}")
-        await self._client.send_message(jid, text)
+        response = await self._client.send_message(jid, text)
+        self._remember_sent(response)
 
 
 class WhatsAppRegistry:

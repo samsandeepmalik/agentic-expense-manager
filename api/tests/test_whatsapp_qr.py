@@ -100,3 +100,39 @@ async def test_registry_start_creates_default_when_empty(monkeypatch, tmp_path):
     await registry.start()
     accounts = registry.list_accounts()
     assert len(accounts) == 1 and accounts[0]["id"] == "default"
+
+
+def test_should_process_rules():
+    from app.channels.whatsapp import should_process
+    base = dict(is_from_me=False, is_group=False,
+                chat_id="15145551234@s.whatsapp.net",
+                own_chat_id="14387257870@s.whatsapp.net", message_id="m1",
+                sent_ids=set(), allowed={"15145551234"})
+    assert should_process(**base)                                  # allowed sender
+    assert not should_process(**{**base, "allowed": set()})        # stranger → silent
+    assert not should_process(**{**base, "is_group": True})        # groups ignored
+    self_chat = {**base, "is_from_me": True,
+                 "chat_id": "14387257870@s.whatsapp.net", "allowed": set()}
+    assert should_process(**self_chat)                             # self-chat works
+    assert not should_process(**{**self_chat, "message_id": "m9",
+                                 "sent_ids": {"m9"}})              # own reply → no loop
+    assert not should_process(**{**base, "is_from_me": True})      # from-me elsewhere
+
+
+def test_allowed_senders_api(db_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.errors import register_error_handler
+    from app.routes import whatsapp as wa_routes
+
+    app = FastAPI()
+    register_error_handler(app)
+    app.include_router(wa_routes.router)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    assert client.get("/api/whatsapp/allowed").json() == {"allowed": []}
+    added = client.post("/api/whatsapp/allowed",
+                        json={"number": "+1 (514) 555-1234"})
+    assert added.json() == {"allowed": ["15145551234"]}            # normalized
+    removed = client.delete("/api/whatsapp/allowed/15145551234")
+    assert removed.json() == {"allowed": []}

@@ -1,12 +1,56 @@
-"""WhatsApp accounts: pairing QR, refresh, unpair, plus legacy endpoints."""
+"""WhatsApp accounts: pairing QR, refresh, unpair, allowlist, legacy endpoints."""
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter
+from pydantic import BaseModel
 
 from ..channels.whatsapp import whatsapp
+from ..db import get_db, get_setting, set_setting
 
 router = APIRouter()
+
+_ALLOWED_KEY = "whatsapp_allowed_senders"
+
+
+class AllowedIn(BaseModel):
+    number: str
+
+
+def _normalize(number: str) -> str:
+    return re.sub(r"\D", "", number)
+
+
+def _read_allowed(conn) -> list[str]:
+    return get_setting(conn, _ALLOWED_KEY) or []
+
+
+@router.get("/api/whatsapp/allowed")
+async def list_allowed():
+    with get_db() as conn:
+        return {"allowed": _read_allowed(conn)}
+
+
+@router.post("/api/whatsapp/allowed")
+async def add_allowed(body: AllowedIn):
+    number = _normalize(body.number)
+    with get_db() as conn:
+        allowed = _read_allowed(conn)
+        if number and number not in allowed:
+            allowed.append(number)
+        set_setting(conn, _ALLOWED_KEY, allowed)
+        return {"allowed": allowed}
+
+
+@router.delete("/api/whatsapp/allowed/{number}")
+async def remove_allowed(number: str):
+    number = _normalize(number)
+    with get_db() as conn:
+        allowed = [n for n in _read_allowed(conn) if n != number]
+        set_setting(conn, _ALLOWED_KEY, allowed)
+        return {"allowed": allowed}
 
 
 @router.get("/api/whatsapp/accounts")
