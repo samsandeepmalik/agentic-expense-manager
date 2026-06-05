@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { del, get, post, type Category, type RecurringRule, type TaxProfile,
-         type WaAccount } from "../api";
+import { del, get, post, type AuditRow, type Category, type RecurringRule,
+         type TaxProfile, type WaAccount } from "../api";
 import { ImportReview } from "../components/ImportReview";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -47,10 +47,15 @@ export default function Settings() {
     mutationFn: (provider: string) => post("/api/settings/ocr", { provider }),
     onSuccess: () => invalidate("ocr") });
 
+  // --- Activity ---
+  const activity = useQuery({ queryKey: ["audit"], refetchInterval: 10000,
+    queryFn: () => get<AuditRow[]>("/api/audit?limit=50") });
+
   // --- Connections ---
   const google = useQuery({ queryKey: ["google"],
     queryFn: () => get<{ configured: boolean; connected: boolean;
-      sheet_url: string | null; pending: number }>("/api/google/status") });
+      sheet_url: string | null; pending: number;
+      last_error: string | null }>("/api/google/status") });
   const whatsapp = useQuery({ queryKey: ["whatsapp"], refetchInterval: 4000,
     queryFn: () => get<WaAccount[]>("/api/whatsapp/accounts") });
   const addWa = useMutation({ mutationFn: () => post("/api/whatsapp/accounts"),
@@ -162,11 +167,16 @@ export default function Settings() {
           : !google.data.configured ? <p className="muted">
               Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in .env to enable.</p>
           : google.data.connected ? (
-            <p>✅ Connected — {google.data.pending} pending{" "}
-              <button className="ghost" onClick={() => syncNow.mutate()}>Sync now</button>
-              {google.data.sheet_url &&
-                <a href={google.data.sheet_url} target="_blank" rel="noreferrer"> Open sheet ↗</a>}
-            </p>)
+            <>
+              <p>✅ Connected — {google.data.pending} pending{" "}
+                <button className="ghost" onClick={() => syncNow.mutate()}>Sync now</button>
+                {google.data.sheet_url &&
+                  <a href={google.data.sheet_url} target="_blank" rel="noreferrer"> Open sheet ↗</a>}
+              </p>
+              {google.data.last_error && (
+                <p style={{ color: "var(--amber)" }}>
+                  Last sync error: {google.data.last_error}</p>)}
+            </>)
           : <a href="/api/google/auth"><button className="primary">Connect Google</button></a>}
       </Section>
 
@@ -232,6 +242,22 @@ export default function Settings() {
       </Section>
 
       <Section title="Import statements & sheets"><ImportReview /></Section>
+
+      <Section title="Activity">
+        {(activity.data ?? []).length === 0 &&
+          <p className="muted">No activity yet.</p>}
+        <table>
+          <tbody>
+            {(activity.data ?? []).map((a) => (
+              <tr key={a.id}>
+                <td className="muted" style={{ whiteSpace: "nowrap" }}>{a.ts}</td>
+                <td><span className="tag income">{a.channel || "—"}</span></td>
+                <td>{a.event}</td>
+                <td className="muted">{a.detail}{a.ref ? ` (#${a.ref})` : ""}</td>
+              </tr>))}
+          </tbody>
+        </table>
+      </Section>
     </div>
   );
 }

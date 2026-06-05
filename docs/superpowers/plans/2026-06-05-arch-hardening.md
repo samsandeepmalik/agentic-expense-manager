@@ -560,7 +560,7 @@ git commit -m "feat(audit): append-only audit log for writes and sync outcomes"
 - Modify: `api/app/main.py`, `web/src/api.ts`, `web/src/pages/Settings.tsx`
 - Test: `api/tests/test_audit.py` (extend)
 
-- [ ] **Step 1: Failing route test** (append to `api/tests/test_audit.py`):
+- [x] **Step 1: Failing route test** (append to `api/tests/test_audit.py`):
 
 ```python
 def test_audit_api(conn, db_path):
@@ -579,9 +579,9 @@ def test_audit_api(conn, db_path):
     assert rows[0]["event"] == "transaction_created"
 ```
 
-- [ ] **Step 2: Run** → FAIL
+- [x] **Step 2: Run** → FAIL
 
-- [ ] **Step 3: Create `api/app/routes/audit.py`**
+- [x] **Step 3: Create `api/app/routes/audit.py`**
 
 ```python
 """Read-only activity feed."""
@@ -602,7 +602,7 @@ async def recent(limit: int = 100):
         return svc.recent(conn, min(limit, 500))
 ```
 
-- [ ] **Step 4: Register + logging format.** In `api/app/main.py`: add `audit` to BOTH the `from .routes import (...)` list and the `for module in (...)` router loop. Replace the logging setup line with:
+- [x] **Step 4: Register + logging format.** In `api/app/main.py`: add `audit` to BOTH the `from .routes import (...)` list and the `for module in (...)` router loop. Replace the logging setup line with:
 
 ```python
 logging.basicConfig(
@@ -611,7 +611,7 @@ logging.basicConfig(
 )
 ```
 
-- [ ] **Step 5: Frontend.** In `web/src/api.ts` add:
+- [x] **Step 5: Frontend.** In `web/src/api.ts` add:
 
 ```typescript
 export interface AuditRow { id: number; ts: string; channel: string;
@@ -655,8 +655,8 @@ In `web/src/pages/Settings.tsx`:
       </Section>
 ```
 
-- [ ] **Step 6: Verify** — `poetry run pytest -v` PASS; `cd web && npm run build` clean
-- [ ] **Step 7: Commit**
+- [x] **Step 6: Verify** — `poetry run pytest -v` PASS; `cd web && npm run build` clean
+- [x] **Step 7: Commit**
 
 ```bash
 git add api/app/routes/audit.py api/app/main.py api/tests/test_audit.py web/src/

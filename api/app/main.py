@@ -15,12 +15,15 @@ from .channels.whatsapp import whatsapp
 from .config import config
 from .db import init_db
 from .errors import register_error_handler
-from .routes import (categories, chat, dashboard, google_auth, imports,
+from .routes import (audit, categories, chat, dashboard, google_auth, imports,
                      recurring, settings, sync, transactions)
 from .routes import whatsapp as whatsapp_routes
 from .services.receipts import build_receipt_prompt
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 
@@ -85,7 +88,7 @@ app.add_middleware(CORSMiddleware, allow_origins=[config.web_origin],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 for module in (chat, dashboard, transactions, categories, recurring,
-               imports, settings, sync, whatsapp_routes, google_auth):
+               imports, settings, sync, whatsapp_routes, google_auth, audit):
     app.include_router(module.router)
 
 

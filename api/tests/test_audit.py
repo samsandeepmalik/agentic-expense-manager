@@ -25,3 +25,19 @@ def test_sync_failure_recorded(conn, db_path, monkeypatch):
     assert rows[0]["event"] == "sync_failed"
     assert "sheet quota" in rows[0]["detail"]
     assert "sheet quota" in (sync.status().get("last_error") or "")
+
+
+def test_audit_api(conn, db_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.errors import register_error_handler
+    from app.routes import audit as audit_routes
+
+    audit.record(conn, "transaction_created", channel="ui", ref="1")
+    conn.commit()
+    app = FastAPI()
+    register_error_handler(app)
+    app.include_router(audit_routes.router)
+    client = TestClient(app, raise_server_exceptions=False)
+    rows = client.get("/api/audit").json()
+    assert rows[0]["event"] == "transaction_created"

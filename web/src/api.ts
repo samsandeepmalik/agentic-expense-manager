@@ -19,6 +19,8 @@ export interface RecurringRule { id: number; template: Record<string, unknown>;
   frequency: string; next_run: string; active: boolean; }
 export interface WaAccount { id: string; device: string; status: string;
   qr: string | null; }
+export interface AuditRow { id: number; ts: string; channel: string;
+  event: string; ref: string; detail: string; }
 export interface ImportRecord { id: number; filename: string; status: string;
   error: string | null;
   rows: { date: string; type: string; category: string; merchant: string;
