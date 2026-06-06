@@ -9,7 +9,9 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from ..config import config
+from ..errors import AppError
 from ..services import google_client as gc
+from ..services.google_client import GoogleNotConnectedError
 
 router = APIRouter()
 
@@ -35,13 +37,19 @@ async def status():
 
 @router.get("/api/google/folders")
 async def list_folders(parent: str | None = None):
-    folders = await asyncio.to_thread(gc.list_folders, parent)
+    try:
+        folders = await asyncio.to_thread(gc.list_folders, parent)
+    except GoogleNotConnectedError as exc:
+        raise AppError("google_not_connected", str(exc), 409)
     return {"folders": folders}
 
 
 @router.post("/api/google/folder")
 async def set_folder(body: FolderIn):
-    return await asyncio.to_thread(gc.set_drive_folder, body.folder)
+    try:
+        return await asyncio.to_thread(gc.set_drive_folder, body.folder)
+    except GoogleNotConnectedError as exc:
+        raise AppError("google_not_connected", str(exc), 409)
 
 
 @router.get("/api/google/auth")

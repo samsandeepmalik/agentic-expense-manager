@@ -84,3 +84,21 @@ def test_folder_routes(monkeypatch, db_path):
     assert picked["id"] == "1X"
     assert client.post("/api/google/folder",
                        json={"folder": "https://nope.example/x"}).status_code == 422
+
+
+def test_folder_routes_not_connected(monkeypatch, db_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.errors import register_error_handler
+    from app.routes import google_auth
+
+    def boom():
+        raise gc.GoogleNotConnectedError()
+    monkeypatch.setattr(gc, "drive_service", boom)
+    app = FastAPI()
+    register_error_handler(app)
+    app.include_router(google_auth.router)
+    client = TestClient(app)
+    response = client.get("/api/google/folders")
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "google_not_connected"
