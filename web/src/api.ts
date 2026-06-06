@@ -27,6 +27,7 @@ export interface ImportRecord { id: number; filename: string; status: string;
   rows: { date: string; type: string; category: string; merchant: string;
           description: string; total: number; duplicate: boolean; skip: boolean;
           receipt_link?: string | null; }[]; }
+export interface DriveFolder { id: string; name: string; }
 export interface UiComponentSpec { type: string; title?: string; label?: string;
   value?: number | string; unit?: string; data?: Record<string, unknown>[];
   xKey?: string; series?: string[]; columns?: string[]; rows?: unknown[][]; }

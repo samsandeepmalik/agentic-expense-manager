@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { del, get, post, type AuditRow, type Category, type RecurringRule,
-         type TaxProfile, type WaAccount } from "../api";
+import { del, get, post, type AuditRow, type Category, type DriveFolder,
+         type RecurringRule, type TaxProfile, type WaAccount } from "../api";
 import { ImportReview } from "../components/ImportReview";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -55,7 +55,7 @@ export default function Settings() {
   const google = useQuery({ queryKey: ["google"],
     queryFn: () => get<{ configured: boolean; connected: boolean;
       sheet_url: string | null; pending: number;
-      last_error: string | null }>("/api/google/status") });
+      last_error: string | null; folder_id: string | null }>("/api/google/status") });
   const whatsapp = useQuery({ queryKey: ["whatsapp"], refetchInterval: 4000,
     queryFn: () => get<WaAccount[]>("/api/whatsapp/accounts") });
   const addWa = useMutation({ mutationFn: () => post("/api/whatsapp/accounts"),
@@ -77,6 +77,20 @@ export default function Settings() {
     onSuccess: () => invalidate("wa-allowed") });
   const syncNow = useMutation({ mutationFn: () => post("/api/sync/now"),
     onSuccess: () => invalidate("google") });
+
+  // --- Drive folder browser ---
+  const [browse, setBrowse] = useState<{ parent: string | null;
+    trail: { id: string | null; name: string }[] } | null>(null);
+  const [folderPaste, setFolderPaste] = useState("");
+  const folders = useQuery({
+    queryKey: ["gfolders", browse?.parent ?? "root"],
+    enabled: !!browse,
+    queryFn: () => get<{ folders: DriveFolder[] }>(
+      `/api/google/folders${browse?.parent ? `?parent=${browse.parent}` : ""}`) });
+  const pickFolder = useMutation({
+    mutationFn: (folder: string) => post<DriveFolder>("/api/google/folder", { folder }),
+    onSuccess: () => { setBrowse(null); setFolderPaste("");
+      queryClient.invalidateQueries({ queryKey: ["google"] }); } });
 
   return (
     <div>
@@ -176,6 +190,50 @@ export default function Settings() {
               {google.data.last_error && (
                 <p style={{ color: "var(--amber)" }}>
                   Last sync error: {google.data.last_error}</p>)}
+              <p className="muted">Changed permissions? <a href="/api/google/auth">Reconnect</a> to
+                grant Drive browsing (needed for folder picker and receipt downloads).</p>
+              <div style={{ marginTop: 10 }}>
+                <b>Drive location</b>{" "}
+                <span className="muted">
+                  {google.data.folder_id ? `folder ${google.data.folder_id}` : "auto (Expense Receipts)"}
+                </span>{" "}
+                <button className="ghost" onClick={() =>
+                  setBrowse({ parent: null, trail: [{ id: null, name: "My Drive" }] })}>
+                  Browse…</button>
+                <input placeholder="…or paste folder link" value={folderPaste}
+                       style={{ width: 220, marginLeft: 8 }}
+                       onChange={(e) => setFolderPaste(e.target.value)} />
+                <button className="ghost" disabled={!folderPaste.trim()}
+                        onClick={() => pickFolder.mutate(folderPaste)}>Set</button>
+                {pickFolder.error && <p style={{ color: "var(--amber)" }}>
+                  {(pickFolder.error as Error).message}</p>}
+                {browse && (
+                  <div className="card" style={{ marginTop: 8, padding: 10 }}>
+                    <p style={{ margin: "0 0 6px" }}>
+                      {browse.trail.map((t, i) => (
+                        <span key={t.id ?? "root"}>
+                          {i > 0 && " / "}
+                          <a style={{ cursor: "pointer" }} onClick={() => setBrowse({
+                            parent: t.id, trail: browse.trail.slice(0, i + 1) })}>{t.name}</a>
+                        </span>))}
+                      <button className="primary" style={{ marginLeft: 12 }}
+                              disabled={!browse.parent}
+                              onClick={() => pickFolder.mutate(browse.parent!)}>
+                        Use this folder</button>
+                      <button className="ghost" onClick={() => setBrowse(null)}>✕</button>
+                    </p>
+                    {folders.error && <p style={{ color: "var(--amber)" }}>
+                      {(folders.error as Error).message}</p>}
+                    {(folders.data?.folders ?? []).map((f) => (
+                      <div key={f.id} style={{ padding: "3px 0" }}>
+                        📁 <a style={{ cursor: "pointer" }} onClick={() => setBrowse({
+                          parent: f.id, trail: [...browse.trail, { id: f.id, name: f.name }] })}>
+                          {f.name}</a>
+                      </div>))}
+                    {folders.data?.folders.length === 0 &&
+                      <p className="muted">No subfolders.</p>}
+                  </div>)}
+              </div>
             </>)
           : <a href="/api/google/auth"><button className="primary">Connect Google</button></a>}
       </Section>
