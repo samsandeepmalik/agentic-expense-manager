@@ -190,6 +190,8 @@ def extract_folder_id(url_or_id: str) -> str:
 
 def list_folders(parent: str | None = None) -> list[dict]:
     """Child folders of `parent` (Drive root when None)."""
+    if parent is not None and not _RAW_ID_RE.match(parent):
+        raise AppError("invalid_folder", "Not a Drive folder id", 422)
     drive = drive_service()
     query = ("mimeType='application/vnd.google-apps.folder' and trashed=false "
              f"and '{parent or 'root'}' in parents")

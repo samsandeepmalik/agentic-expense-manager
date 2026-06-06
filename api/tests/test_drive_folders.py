@@ -55,3 +55,32 @@ def test_set_drive_folder_validates_and_persists(monkeypatch, db_path):
     info = gc.set_drive_folder("https://drive.google.com/drive/folders/1Target")
     assert info["id"] == "1Target"
     assert gc._read(gc.DRIVE_FOLDER_ID) == "1Target"
+
+
+def test_list_folders_rejects_invalid_parent(monkeypatch, db_path):
+    fake = FakeDrive([])
+    monkeypatch.setattr(gc, "drive_service", lambda: fake)
+    with pytest.raises(Exception):
+        gc.list_folders("abc' or '1'='1")
+
+
+def test_folder_routes(monkeypatch, db_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.errors import register_error_handler
+    from app.routes import google_auth
+
+    fake = FakeDrive([{"id": "f1", "name": "Receipts"}])
+    monkeypatch.setattr(gc, "drive_service", lambda: fake)
+    app = FastAPI()
+    register_error_handler(app)
+    app.include_router(google_auth.router)
+    client = TestClient(app)
+
+    assert client.get("/api/google/folders").json() == {
+        "folders": [{"id": "f1", "name": "Receipts"}]}
+    picked = client.post("/api/google/folder",
+                         json={"folder": "https://drive.google.com/drive/folders/1X"}).json()
+    assert picked["id"] == "1X"
+    assert client.post("/api/google/folder",
+                       json={"folder": "https://nope.example/x"}).status_code == 422
