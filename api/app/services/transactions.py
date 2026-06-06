@@ -54,12 +54,13 @@ def create_transaction(conn: sqlite3.Connection, data: dict, *,
     cursor = conn.execute(
         """INSERT INTO transactions(date, type, category_id, description, merchant,
            amount, tax_breakdown, total, counted, image_path, source, external_ref,
-           sync_status, loan)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           sync_status, loan, receipt_link)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (data["date"], data["type"], category["id"], data.get("description", ""),
          data.get("merchant", ""), parts["amount"], json.dumps(parts["breakdown"]),
          total, parts["counted"], data.get("image_path"), data.get("source", "ui"),
-         data.get("external_ref"), "pending", int(bool(data.get("loan", False)))),
+         data.get("external_ref"), "pending", int(bool(data.get("loan", False))),
+         data.get("receipt_link")),
     )
     row = conn.execute("SELECT * FROM transactions WHERE id=?", (cursor.lastrowid,)).fetchone()
     result = _row_to_dict(conn, row)

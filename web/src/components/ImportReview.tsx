@@ -45,7 +45,7 @@ export function ImportReview() {
         <>
           <table style={{ marginTop: 12 }}>
             <thead><tr><th>Keep</th><th>Date</th><th>Type</th><th>Category</th>
-                       <th>Merchant</th><th>Total</th><th></th></tr></thead>
+                       <th>Merchant</th><th>Total</th><th></th><th></th></tr></thead>
             <tbody>
               {record.rows.map((row, index) => (
                 <tr key={index} style={{ opacity: skips.has(index) ? 0.45 : 1 }}>
@@ -55,6 +55,8 @@ export function ImportReview() {
                   <td><span className={`tag ${row.type}`}>{row.type}</span></td>
                   <td>{row.category}</td><td>{row.merchant}</td>
                   <td>${row.total.toFixed(2)}</td>
+                  <td>{row.receipt_link &&
+                    <a href={row.receipt_link} target="_blank" rel="noreferrer">📎</a>}</td>
                   <td>{row.duplicate &&
                     <span style={{ color: "var(--amber)" }}>possible duplicate</span>}</td>
                 </tr>))}
