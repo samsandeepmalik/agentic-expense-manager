@@ -8,6 +8,7 @@ SQLite settings table.
 from __future__ import annotations
 
 import io
+import re
 from typing import Any
 
 from google.auth.transport.requests import Request
@@ -18,10 +19,11 @@ from googleapiclient.http import MediaIoBaseUpload
 
 from ..config import config
 from ..db import get_db, get_setting, set_setting
+from ..errors import AppError
 from ..settings_keys import DRIVE_FOLDER_ID, GOOGLE_TOKENS
 
 SCOPES = [
-    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 
@@ -165,3 +167,46 @@ def upload_receipt_image(filename: str, data: bytes, mime_type: str) -> str:
         fileId=created["id"], body={"type": "anyone", "role": "reader"}
     ).execute()
     return created["webViewLink"]
+
+
+# ---------------------------------------------------------------------------
+# Folder browsing / selection
+# ---------------------------------------------------------------------------
+
+_FOLDER_URL_RE = re.compile(r"/folders/([A-Za-z0-9_-]+)")
+_RAW_ID_RE = re.compile(r"^[A-Za-z0-9_-]{5,}$")
+
+
+def extract_folder_id(url_or_id: str) -> str:
+    """Accept a pasted Drive folder URL or a bare folder id."""
+    value = url_or_id.strip()
+    match = _FOLDER_URL_RE.search(value)
+    if match:
+        return match.group(1)
+    if _RAW_ID_RE.match(value) and "://" not in value:
+        return value
+    raise AppError("invalid_folder", "Not a Drive folder link or id", 422)
+
+
+def list_folders(parent: str | None = None) -> list[dict]:
+    """Child folders of `parent` (Drive root when None)."""
+    drive = drive_service()
+    query = ("mimeType='application/vnd.google-apps.folder' and trashed=false "
+             f"and '{parent or 'root'}' in parents")
+    result = drive.files().list(q=query, fields="files(id, name)",
+                                orderBy="name", pageSize=200).execute()
+    return result.get("files", [])
+
+
+def folder_info(folder_id: str) -> dict:
+    drive = drive_service()
+    meta = drive.files().get(fileId=folder_id, fields="id, name, mimeType").execute()
+    if meta.get("mimeType") != "application/vnd.google-apps.folder":
+        raise AppError("not_a_folder", "That Drive item is not a folder", 422)
+    return {"id": meta["id"], "name": meta["name"]}
+
+
+def set_drive_folder(url_or_id: str) -> dict:
+    info = folder_info(extract_folder_id(url_or_id))
+    _write(DRIVE_FOLDER_ID, info["id"])
+    return info
