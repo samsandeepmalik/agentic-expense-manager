@@ -80,7 +80,14 @@ export default function Transactions({ period }: { period: string }) {
               <td></td>
               <td><input type="date" defaultValue={t.date}
                     onChange={(e) => setDraft((d) => ({ ...d, date: e.target.value }))} /></td>
-              <td>{t.type}</td>
+              <td>
+                {t.type}
+                <label style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
+                  <input type="checkbox" defaultChecked={t.loan}
+                         onChange={(e) => setDraft((d) => ({ ...d, loan: e.target.checked }))} />
+                  <span style={{ fontSize: "0.8em" }}>loan</span>
+                </label>
+              </td>
               <td><select defaultValue={t.category}
                     onChange={(e) => setDraft((d) => ({ ...d, category: e.target.value }))}>
                   {(categories.data ?? []).filter((c) => c.type === t.type)
@@ -99,7 +106,7 @@ export default function Transactions({ period }: { period: string }) {
               <td><input type="checkbox" checked={selected.has(t.id)}
                          onChange={() => toggle(t.id)} /></td>
               <td>{t.date}</td>
-              <td><span className={`tag ${t.type}`}>{t.type}</span></td>
+              <td><span className={`tag ${t.type}`}>{t.type}</span>{t.loan && <span className="tag" style={{ background: "var(--amber)", color: "#fff" }}>loan</span>}</td>
               <td>{t.category}</td><td>{t.merchant || t.description}</td>
               <td>${t.total.toFixed(2)}</td>
               <td className="muted">{Object.entries(t.tax_breakdown)

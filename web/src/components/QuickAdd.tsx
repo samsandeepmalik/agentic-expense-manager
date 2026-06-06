@@ -9,7 +9,8 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
   const profiles = useQuery({ queryKey: ["tax-profiles"],
     queryFn: () => get<TaxProfile[]>("/api/tax-profiles") });
   const [form, setForm] = useState({ date: new Date().toISOString().slice(0, 10),
-    type: "expense", category: "", total: "", merchant: "", description: "" });
+    type: "expense", category: "", total: "", merchant: "", description: "",
+    loan: false });
   const [error, setError] = useState("");
 
   const selected = categories.data?.find((c) => c.name === form.category);
@@ -60,6 +61,11 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
                  onChange={(e) => set("merchant", e.target.value)} />
           <input placeholder="Note (optional)" value={form.description}
                  onChange={(e) => set("description", e.target.value)} />
+          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input type="checkbox" checked={form.loan}
+                   onChange={(e) => setForm((f) => ({ ...f, loan: e.target.checked }))} />
+            Loan (money lent / borrowed)
+          </label>
           <button className="primary" disabled={!form.category || !total || save.isPending}
                   onClick={() => save.mutate()}>
             {save.isPending ? "Saving…" : "Save"}</button>

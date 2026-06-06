@@ -3,7 +3,8 @@ export interface Category { id: number; name: string; type: "income" | "expense"
 export interface Txn { id: number; date: string; type: string; category: string;
   description: string; merchant: string; amount: number;
   tax_breakdown: Record<string, number>; total: number; counted: number;
-  image_path: string | null; source: string; sync_status: string; }
+  image_path: string | null; source: string; sync_status: string;
+  loan: boolean; receipt_link: string | null; }
 export interface Budget { name: string; budget: number; spent: number; pct: number; }
 export interface Dashboard {
   period: { start: string; end: string };
