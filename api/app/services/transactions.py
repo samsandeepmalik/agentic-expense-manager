@@ -150,12 +150,12 @@ def export_csv(conn) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(["id", "date", "type", "category", "description", "merchant",
-                     "amount", "taxes", "total", "counted", "source"])
+                     "amount", "taxes", "total", "counted", "source", "loan"])
     for txn in list_transactions(conn, limit=100000):
         writer.writerow([txn["id"], txn["date"], txn["type"], txn["category"],
                          txn["description"], txn["merchant"], txn["amount"],
                          json.dumps(txn["tax_breakdown"]), txn["total"],
-                         txn["counted"], txn["source"]])
+                         txn["counted"], txn["source"], txn["loan"]])
     return buffer.getvalue()
 
 

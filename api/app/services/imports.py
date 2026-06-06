@@ -44,7 +44,8 @@ def extract_text(filename: str, data: bytes) -> str:
 PARSE_PROMPT = """Below is the text of a bank statement or expense sheet.
 Extract every transaction as a JSON array. Each item:
 {{"date": "YYYY-MM-DD", "type": "income"|"expense", "category": "<best guess from: {categories}>",
-  "merchant": "...", "description": "...", "total": <number, positive>}}
+  "merchant": "...", "description": "...", "total": <number, positive>,
+  "loan": <true ONLY if the row clearly marks a loan, else false>}}
 Rules: deposits/credits are income; withdrawals/debits are expense.
 Respond with ONLY the JSON array, no prose.
 

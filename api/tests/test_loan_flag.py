@@ -33,3 +33,29 @@ def test_loan_migration_idempotent(db_path):
     with get_db() as conn:
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
     assert "loan" in cols
+
+
+def test_loan_via_route(db_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.routes import transactions as txn_routes
+    app = FastAPI()
+    app.include_router(txn_routes.router)
+    client = TestClient(app)
+    created = client.post("/api/transactions", json={
+        "date": "2026-06-01", "type": "expense", "category": "Groceries",
+        "total": 25.0, "loan": True}).json()
+    assert created["loan"] is True
+    patched = client.patch(f"/api/transactions/{created['id']}",
+                           json={"loan": False}).json()
+    assert patched["loan"] is False
+
+
+def test_loan_in_csv_export(db_path):
+    from app.db import get_db
+    with get_db() as conn:
+        txn_svc.create_transaction(conn, _data(loan=True))
+        out = txn_svc.export_csv(conn)
+    header, first = out.splitlines()[0], out.splitlines()[1]
+    assert "loan" in header
+    assert first.rstrip().endswith("True")

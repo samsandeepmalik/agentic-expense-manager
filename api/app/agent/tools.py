@@ -40,6 +40,8 @@ RECORD_TRANSACTION_SCHEMA = {
         "total": {"type": "number", "description": "Grand total paid incl. taxes"},
         "image_path": {"type": "string"},
         "source": {"type": "string"},
+        "loan": {"type": "boolean",
+                 "description": "True if this is a loan (money lent/borrowed), default false"},
     },
     "required": ["date", "type", "category", "total"],
 }
@@ -148,6 +150,7 @@ def build_tools(channel: str, ui_sink: UiSink, source: str) -> list[AgentTool]:
                         "total": float(params["total"]),
                         "image_path": params.get("image_path"),
                         "source": params.get("source", source),
+                        "loan": bool(params.get("loan", False)),
                     })
             return _text_result(await asyncio.to_thread(work))
         except Exception as exc:  # noqa: BLE001 — friendly degradation

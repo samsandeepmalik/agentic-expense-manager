@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 SHEET_NAME = "Transactions"
 SHEET_HEADERS = ["ID", "Date", "Type", "Category", "Description", "Merchant",
-                 "Amount", "Taxes", "Total", "Counted", "Image Link", "Source"]
+                 "Amount", "Taxes", "Total", "Counted", "Image Link", "Source", "Loan"]
 
 
 def sync_enabled() -> bool:
@@ -46,7 +46,7 @@ def _txn_row(txn: dict, image_link: str) -> list:
     return [txn["id"], txn["date"], txn["type"], txn["category"],
             txn["description"], txn["merchant"], txn["amount"],
             json.dumps(txn["tax_breakdown"]), txn["total"], txn["counted"],
-            image_link, txn["source"]]
+            image_link, txn["source"], "yes" if txn.get("loan") else ""]
 
 
 def _sheet_ids(sheets, spreadsheet_id: str) -> dict[int, int]:
@@ -85,7 +85,7 @@ def reconcile() -> dict:
                     valueInputOption="USER_ENTERED", body={"values": [row]}).execute()
             else:
                 sheets.spreadsheets().values().append(
-                    spreadsheetId=spreadsheet_id, range=f"{SHEET_NAME}!A:L",
+                    spreadsheetId=spreadsheet_id, range=f"{SHEET_NAME}!A:M",
                     valueInputOption="USER_ENTERED", body={"values": [row]}).execute()
             conn.execute("UPDATE transactions SET sync_status='synced' WHERE id=?",
                          (txn["id"],))
@@ -96,9 +96,9 @@ def reconcile() -> dict:
             if missing_id not in app_ids:
                 sheets.spreadsheets().values().update(
                     spreadsheetId=spreadsheet_id,
-                    range=f"{SHEET_NAME}!A{row_number}:L{row_number}",
+                    range=f"{SHEET_NAME}!A{row_number}:M{row_number}",
                     valueInputOption="RAW",
-                    body={"values": [["(deleted)"] + [""] * 11]}).execute()
+                    body={"values": [["(deleted)"] + [""] * 12]}).execute()
         return {"synced": pushed}
 
 

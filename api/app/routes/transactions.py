@@ -21,6 +21,7 @@ class TransactionIn(BaseModel):
     total: float = Field(gt=0)
     merchant: str = ""
     description: str = ""
+    loan: bool = False
 
 
 class TransactionPatch(BaseModel):
@@ -30,6 +31,7 @@ class TransactionPatch(BaseModel):
     total: float | None = None
     merchant: str | None = None
     description: str | None = None
+    loan: bool | None = None
 
 
 class BulkIn(BaseModel):
