@@ -53,3 +53,68 @@ async def build_receipt_prompt(
         "choose a category, and call record_transaction with image_path set."
     )
     return "\n".join(parts)
+
+
+import re  # noqa: E402 — appended block
+from . import google_client as gc  # noqa: E402
+
+_FILE_ID_RES = (re.compile(r"/file/d/([A-Za-z0-9_-]+)"),
+                re.compile(r"[?&]id=([A-Za-z0-9_-]+)"))
+
+_MIME_EXT = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
+             "application/pdf": ".pdf"}
+
+
+def extract_file_id(url: str) -> str | None:
+    for pattern in _FILE_ID_RES:
+        match = pattern.search(url or "")
+        if match:
+            return match.group(1)
+    return None
+
+
+def _drive_download(file_id: str) -> tuple[bytes, str]:
+    """Bytes + mimeType of a Drive file. Needs full drive scope."""
+    drive = gc.drive_service()
+    meta = drive.files().get(fileId=file_id, fields="mimeType").execute()
+    data = drive.files().get_media(fileId=file_id).execute()
+    return data, meta.get("mimeType", "application/octet-stream")
+
+
+def download_linked_receipts() -> int:
+    """Backfill local copies for txns that have a Drive receipt_link but no
+    image_path. Returns how many were downloaded. Failures are audited and
+    skipped — the external link still works."""
+    from ..db import get_db
+    from . import audit
+    if not gc.is_connected():
+        return 0
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, receipt_link FROM transactions "
+            "WHERE receipt_link IS NOT NULL AND image_path IS NULL").fetchall()
+    done = 0
+    for row in rows:
+        file_id = extract_file_id(row["receipt_link"])
+        if not file_id:
+            continue
+        try:
+            data, mime = _drive_download(file_id)
+        except Exception as exc:  # noqa: BLE001 — keep the link, log, move on
+            with get_db() as conn:
+                audit.record(conn, "receipt_download_failed", channel="import",
+                             ref=str(row["id"]), detail=str(exc))
+            continue
+        receipts_dir = config.data_dir / "receipts"
+        receipts_dir.mkdir(parents=True, exist_ok=True)
+        path = receipts_dir / f"drive-{file_id}{_MIME_EXT.get(mime, '.bin')}"
+        path.write_bytes(data)
+        with get_db() as conn:
+            conn.execute("UPDATE transactions SET image_path=? WHERE id=?",
+                         (str(path), row["id"]))
+        done += 1
+    if done:
+        with get_db() as conn:
+            audit.record(conn, "receipts_downloaded", channel="import",
+                         detail=f"{done} receipts copied from Drive")
+    return done

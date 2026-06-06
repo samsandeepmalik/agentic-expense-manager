@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel
 
 from ..services import imports as svc
+from ..services import receipts as receipts_svc
 
 router = APIRouter()
 
@@ -25,4 +28,7 @@ async def get_import(import_id: int):
 
 @router.post("/api/imports/{import_id}/approve")
 async def approve(import_id: int, body: ApproveIn):
-    return svc.approve_import(import_id, body.indexes)
+    result = svc.approve_import(import_id, body.indexes)
+    asyncio.get_running_loop().run_in_executor(
+        None, receipts_svc.download_linked_receipts)
+    return result
