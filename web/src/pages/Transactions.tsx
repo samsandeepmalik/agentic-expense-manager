@@ -115,7 +115,9 @@ export default function Transactions({ period }: { period: string }) {
               <td>{t.image_path
                 ? <button className="ghost"
                     onClick={() => setLightbox(`/api/receipts/${t.id}`)}>🧾</button>
-                : "—"}</td>
+                : t.receipt_link
+                  ? <a href={t.receipt_link} target="_blank" rel="noreferrer" title="Receipt on Drive">📎</a>
+                  : null}</td>
               <td><button className="ghost"
                     onClick={() => { setEditing(t.id); setDraft({}); }}>✎</button>
                   <button className="ghost" style={{ color: "var(--amber)" }}
