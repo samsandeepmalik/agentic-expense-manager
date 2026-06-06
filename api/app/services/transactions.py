@@ -14,7 +14,7 @@ from . import tax as tax_svc
 
 COLUMNS = ["id", "date", "type", "category_id", "description", "merchant",
            "amount", "tax_breakdown", "total", "counted", "image_path",
-           "source", "external_ref", "sync_status", "created_at", "updated_at"]
+           "source", "external_ref", "sync_status", "loan", "created_at", "updated_at"]
 
 
 def _request_sync() -> None:
@@ -27,6 +27,7 @@ def _request_sync() -> None:
 def _row_to_dict(conn, row) -> dict:
     txn = dict(row)
     txn["tax_breakdown"] = json.loads(txn["tax_breakdown"])
+    txn["loan"] = bool(txn.get("loan", 0))
     category = conn.execute(
         "SELECT name FROM categories WHERE id=?", (txn["category_id"],)
     ).fetchone()
@@ -52,12 +53,12 @@ def create_transaction(conn: sqlite3.Connection, data: dict) -> dict:
     cursor = conn.execute(
         """INSERT INTO transactions(date, type, category_id, description, merchant,
            amount, tax_breakdown, total, counted, image_path, source, external_ref,
-           sync_status)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           sync_status, loan)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (data["date"], data["type"], category["id"], data.get("description", ""),
          data.get("merchant", ""), parts["amount"], json.dumps(parts["breakdown"]),
          total, parts["counted"], data.get("image_path"), data.get("source", "ui"),
-         data.get("external_ref"), "pending"),
+         data.get("external_ref"), "pending", int(bool(data.get("loan", False)))),
     )
     row = conn.execute("SELECT * FROM transactions WHERE id=?", (cursor.lastrowid,)).fetchone()
     result = _row_to_dict(conn, row)
@@ -110,11 +111,12 @@ def update_transaction(conn, txn_id: int, changes: dict) -> dict:
     parts = _compute(conn, category, round(float(merged["total"]), 2))
     conn.execute(
         """UPDATE transactions SET date=?, type=?, category_id=?, description=?,
-           merchant=?, amount=?, tax_breakdown=?, total=?, counted=?,
+           merchant=?, amount=?, tax_breakdown=?, total=?, counted=?, loan=?,
            sync_status='pending', updated_at=datetime('now') WHERE id=?""",
         (merged["date"], merged["type"], merged["category_id"], merged["description"],
          merged["merchant"], parts["amount"], json.dumps(parts["breakdown"]),
-         round(float(merged["total"]), 2), parts["counted"], txn_id),
+         round(float(merged["total"]), 2), parts["counted"],
+         int(bool(merged.get("loan", False))), txn_id),
     )
     result = get_transaction(conn, txn_id)
     audit.record(conn, "transaction_updated", channel=result["source"],

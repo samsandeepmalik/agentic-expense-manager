@@ -125,6 +125,9 @@ def init_db() -> None:
         columns = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
         if "receipt_link" not in columns:
             conn.execute("ALTER TABLE transactions ADD COLUMN receipt_link TEXT")
+        if "loan" not in columns:
+            conn.execute(
+                "ALTER TABLE transactions ADD COLUMN loan INTEGER NOT NULL DEFAULT 0")
         legacy = conn.execute(
             "SELECT key, value FROM settings WHERE key LIKE 'receipt_link_%'"
         ).fetchall()
