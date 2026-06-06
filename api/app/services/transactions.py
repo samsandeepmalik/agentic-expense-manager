@@ -42,7 +42,8 @@ def _compute(conn, category: dict, total: float) -> dict:
     return {"amount": calc["amount"], "breakdown": calc["breakdown"], "counted": counted}
 
 
-def create_transaction(conn: sqlite3.Connection, data: dict) -> dict:
+def create_transaction(conn: sqlite3.Connection, data: dict, *,
+                       audit_row: bool = True) -> dict:
     category = cat_svc.find_category_by_name(conn, data["category"])
     if category is None:
         raise AppError("category_not_found", f"Unknown category: {data['category']}", 404)
@@ -62,9 +63,10 @@ def create_transaction(conn: sqlite3.Connection, data: dict) -> dict:
     )
     row = conn.execute("SELECT * FROM transactions WHERE id=?", (cursor.lastrowid,)).fetchone()
     result = _row_to_dict(conn, row)
-    audit.record(conn, "transaction_created", channel=result["source"],
-                 ref=str(result["id"]),
-                 detail=f"{result['date']} {result['merchant']} ${result['total']}")
+    if audit_row:
+        audit.record(conn, "transaction_created", channel=result["source"],
+                     ref=str(result["id"]),
+                     detail=f"{result['date']} {result['merchant']} ${result['total']}")
     _request_sync()
     return result
 

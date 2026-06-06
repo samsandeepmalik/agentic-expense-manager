@@ -10,6 +10,7 @@ import re
 
 from ..db import get_db
 from ..errors import AppError
+from . import audit
 from . import dedup as dedup_svc
 from . import transactions as txn_svc
 
@@ -89,6 +90,9 @@ async def start_import(filename: str, data: bytes) -> dict:
                 row["skip"] = flag
             conn.execute("UPDATE imports SET status='review', rows=? WHERE id=?",
                          (json.dumps(rows), import_id))
+            audit.record(conn, "import_uploaded", channel="import",
+                         ref=str(import_id),
+                         detail=f"{filename}: {len(rows)} rows parsed")
     except Exception as exc:  # noqa: BLE001
         logger.exception("Import parse failed")
         with get_db() as conn:
@@ -119,7 +123,10 @@ def approve_import(import_id: int, indexes: list[int] | None) -> dict:
                 continue
             txn_svc.create_transaction(conn, row | {
                 "source": "import",
-                "external_ref": f"import:{import_id}:{index}"})
+                "external_ref": f"import:{import_id}:{index}"}, audit_row=False)
             created += 1
         conn.execute("UPDATE imports SET status='approved' WHERE id=?", (import_id,))
+        audit.record(conn, "import_approved", channel="import",
+                     ref=str(import_id),
+                     detail=f"{record['filename']}: {created} rows approved")
     return {"created": created}
