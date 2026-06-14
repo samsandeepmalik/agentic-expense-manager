@@ -67,28 +67,28 @@ Rules that keep it clean:
 sequenceDiagram
     participant P as Phone (self-chat)
     participant W as WhatsAppManager
-    participant G as should_process gate
-    participant R as receipts.build_receipt_prompt
-    participant A as Agent (pi-agent + Claude)
+    participant G as should_process
+    participant R as receipts
+    participant A as Agent (Claude)
     participant T as Tools
     participant DB as SQLite
 
-    P->>W: MessageEv (text, image, or PDF document)
-    W->>G: from_me? group? sender? own reply id?
-    alt rejected (stranger / group / own echo)
+    P->>W: MessageEv (text, image, or PDF)
+    W->>G: from_me? group? sender? own echo?
+    alt rejected (stranger, group, or own echo)
         G-->>W: ignore (logged)
     else accepted
-        G-->>W: PROCESS
-        alt image or PDF document attached
-            W->>R: image_bytes + mime_type
-            R->>R: PDF → render pages (PyMuPDF, cap 10)<br/>→ OCR each page; store .preview.png<br/>Image → OCR directly
-            R-->>W: composed prompt with OCR text + image_path
+        G-->>W: process
+        opt image or PDF attached
+            W->>R: bytes + mime_type
+            Note over R: PDF rendered to PNG pages (PyMuPDF, cap 10),<br/>then OCR per page. Images are OCR'd directly.
+            R-->>W: prompt with OCR text + image_path
         end
         W->>A: prompt
-        A->>T: confirm profile + category, then record_transaction(total=...)
-        T->>DB: create txn (tax back-calc, audit row, sync dirty flag)
+        A->>T: confirm profile + category, then record_transaction
+        T->>DB: create txn (tax back-calc, audit row, sync flag)
         A-->>W: final text
-        W->>P: reply (id tracked → never re-processed)
+        W->>P: reply (id tracked, never re-processed)
     end
 ```
 
@@ -121,22 +121,29 @@ implement the protocol, append to `main.CHANNELS`.
 - `agent/anthropic_provider.py`: Anthropic Messages API with Claude Max OAuth
   (`Bearer` + `anthropic-beta: oauth-2025-04-20` + mandatory Claude Code
   system block) or `x-api-key` fallback. **Protected — verified live.**
-- `agent/tools.py`: thin async wrappers over services —
-  `record_transaction` (total only; taxes server-side; also takes `notes`,
-  `receipt_link`, and an optional `profile`), `update_transaction` /
-  `delete_transaction` (edit/remove by id), `query_transactions` (incl. text +
-  loan filters), `get_summary`, `manage_categories` / `manage_budgets` (both take
-  an optional `profile` so they act on the right book, not silently the active
-  one), `manage_recurring` (list/create/**update** (edit + pause/resume via
-  `active`)/delete), `list_profiles`, `set_active_profile` (now on **every**
-  channel incl. WhatsApp), and `render_ui` (**web only**) which emits declarative
-  chart/table/metric specs the frontend renders verbatim (GenUI).
-- **Confirm flow (both web and WhatsApp)**: before calling `record_transaction`
-  the agent always confirms (in one message) the target profile (required when
-  2+ profiles exist), the category/sub-category, and the income/expense type.
-  Only after the user confirms (or corrects) does the tool call execute.
-  If the user's message already states profile and category unambiguously, the
-  agent may proceed without a round-trip but still reports what it recorded.
+- `agent/tools.py`: thin async wrappers over the same services the HTTP routes
+  use — no duplicated business logic. Each tool wraps its body in `try/except`
+  and returns `{"error": ...}` for friendly degradation.
+
+The tool set:
+
+| Tool | Notes |
+|---|---|
+| `record_transaction` | total only (taxes derived server-side); also `notes`, `receipt_link`, optional `profile` |
+| `update_transaction` / `delete_transaction` | edit or remove by id |
+| `query_transactions` | date / type / category / text / loan filters |
+| `get_summary` | dashboard-style aggregates |
+| `manage_categories` / `manage_budgets` | optional `profile` so they act on the right book, not silently the active one |
+| `manage_recurring` | list / create / update (edit + pause/resume via `active`) / delete |
+| `list_profiles` / `set_active_profile` | available on every channel, incl. WhatsApp |
+| `render_ui` | **web only** — emits declarative chart/table/metric specs the frontend renders verbatim (GenUI) |
+
+**Confirm flow (web and WhatsApp).** Before calling `record_transaction` the
+agent confirms, in one message, the target profile (required when 2+ profiles
+exist), the category/sub-category, and the income/expense type. The tool runs
+only after the user confirms or corrects. If the original message already states
+profile and category unambiguously, the agent may proceed without a round-trip,
+but still reports what it recorded.
 
 ## Sync (one-way, event-driven)
 
@@ -152,48 +159,53 @@ flowchart LR
     WORKER -- "outcome → audit_log +<br/>last_error setting" --> DB[(SQLite)]
 ```
 
-- Services fire `sync.request_sync()` on every write; a single long-lived
-  `sync_worker` debounces and runs one `reconcile()` per burst.
-- `reconcile()` is idempotent: the sheet's ID column maps app txn id → row;
-  pending/missing rows are upserted, and rows whose txn id no longer exists are
-  **removed** (`deleteDimension`, not blanked). Never reads data back.
-- **Configurable, per-profile columns**: a column registry (`COLUMN_REGISTRY`)
-  drives the sheet. Each profile stores its own ordered/selected column list
-  (`SHEET_COLUMN_CONFIG` setting, edited via `GET/PUT /api/google/columns` and the
-  Settings checklist with up/down reorder). Header, data row, and
-  number-formatting all derive from one resolved column list, so there is no
-  positional drift; `id` is always present and first (keeps the id→row map
-  valid). Available columns: ID, Date, Type, Category, Sub-category, Description,
-  Merchant, Amount, the per-component tax columns, Total, **Counted %** (the
-  category percent, e.g. `20%`), Counted, **Receipt** (a readable derived name) +
-  **Receipt Link** (the Drive URL), Source, Loan, Notes, plus opt-in
-  Created/Updated. Changing the set/order rewrites the whole tab.
-- **Per-component tax columns**: the `tax` column expands into one column per tax
-  component (e.g. `GST`, `QST`), computed per profile from its active tax profile
+**Trigger and worker.** Every write calls `sync.request_sync()`, which sets a
+thread-safe dirty flag. One long-lived `sync_worker` debounces bursts (~2s) and
+runs a single `reconcile()` per burst; an hourly scheduler tick also reconciles
+as a catch-up.
+
+**Idempotent reconcile.** The sheet's ID column maps app txn id → row. Pending
+or missing rows are upserted; rows whose txn id no longer exists are *removed*
+with `deleteDimension` (not blanked). Sync never reads data back.
+
+**Configurable per-profile columns.** A column registry (`COLUMN_REGISTRY`)
+drives the sheet, and each profile stores its own ordered selection
+(`SHEET_COLUMN_CONFIG`, edited via `GET/PUT /api/google/columns` and the Settings
+checklist). Header, data row, and number formatting all derive from that one
+resolved list, so there is no positional drift. `id` is always present and first
+(keeps the id→row map valid). Changing the set or order rewrites the whole tab.
+
+- *Available columns:* ID, Date, Type, Category, Sub-category, Description,
+  Merchant, Amount, per-component tax columns, Total, Counted % (the category
+  percent, e.g. `20%`), Counted, Receipt (a readable derived name), Receipt Link
+  (the Drive URL), Source, Loan, Notes, plus opt-in Created/Updated.
+- *Per-component tax columns:* the `tax` column expands into one column per
+  component (e.g. `GST`, `QST`), derived per profile from its active tax profile
   plus any component seen in its transactions.
-- **Frozen TOTALS row**: row 1 is the header, **row 2 is a frozen, coloured
-  `TOTALS` row** (both rows frozen so totals stay visible while scrolling), and
-  data starts at row 3. Each money column holds an open-ended `=SUM(col3:col)`, so
-  the total auto-extends as rows are appended — no recompute on add/delete.
-- **Per-profile**: each profile mirrors to its own spreadsheet (`Expense
-  Manager — {name}`) and its own Drive subfolder (named after the profile,
-  nested under the `Expense Manager` root folder), with the
-  ids stored on the `profiles` row. `reconcile()` loops every profile, lazily
-  creating its sheet/folder on first sync. Spreadsheet creation is idempotent:
-  the app reuses an existing same-named sheet in the folder before creating a
-  new one, preventing duplicates on reconnect.
-- **Year-based sheet tabs**: new spreadsheets get one tab per calendar year
-  (`2025`, `2026`, …); the current year is always the leftmost tab, plus a
-  cross-year **Summary** tab that sums each year's data (open-ended from row 3, so
-  the per-tab `TOTALS` rows are never double-counted). Legacy spreadsheets that
-  already have a "Transactions" tab keep the single-tab layout but still get the
-  frozen `TOTALS` row.
-- **Year subfolders in Drive**: receipts are organised as
-  `{base_name} — {profile_name}/{year}/{date}_{id}_{merchant}.{ext}`.
-  Year folder IDs are cached in the settings table to avoid a Drive list call
-  on every upload.
-- Failures land in `audit_log` + `last_error` (shown in Settings) — never
-  silent.
+
+**Frozen TOTALS row.** Row 1 is the header; row 2 is a frozen, coloured `TOTALS`
+row (both rows frozen, so totals stay visible while scrolling); data starts at
+row 3. Each money column holds an open-ended `=SUM(col3:col)`, so totals
+auto-extend as rows are appended — no recompute on add or delete.
+
+**Per-profile isolation.** Each profile mirrors to its own spreadsheet (`Expense
+Manager — {name}`) and Drive subfolder, with the ids stored on the `profiles`
+row. `reconcile()` loops every profile, lazily creating its sheet and folder on
+first sync. Creation is idempotent: an existing same-named sheet in the folder is
+reused before a new one is created, preventing duplicates on reconnect.
+
+**Layout details.**
+
+- *Year tabs:* new spreadsheets get one tab per calendar year (current year
+  leftmost) plus a cross-year **Summary** tab that sums each year (open-ended
+  from row 3, so per-tab `TOTALS` rows are never double-counted). Legacy
+  single-`Transactions`-tab sheets keep that layout but still get the frozen row.
+- *Drive folders:* receipts are stored as
+  `{base_name} — {profile_name}/{year}/{date}_{id}_{merchant}.{ext}`; year-folder
+  ids are cached in settings to avoid a Drive list call per upload.
+
+**Failures** land in `audit_log` and the `last_error` setting (shown in
+Settings) — never silent.
 
 ## Data model
 
@@ -254,9 +266,23 @@ erDiagram
         text next_run
         int profile_id FK
     }
-    imports { text status "parsing|review|approved|failed"  text rows "JSON"  int profile_id FK }
-    settings { text key PK  text value "JSON" }
-    audit_log { text ts  text channel  text event  text ref  text detail  int profile_id "NULL = global" }
+    imports {
+        text status "parsing|review|approved|failed"
+        text rows "JSON"
+        int profile_id FK
+    }
+    settings {
+        text key PK
+        text value "JSON"
+    }
+    audit_log {
+        text ts
+        text channel
+        text event
+        text ref
+        text detail
+        int profile_id "NULL = global"
+    }
 ```
 
 Sub-categories are one level deep: `categories.parent_id = 0` means top-level;
@@ -286,18 +312,17 @@ lives in a host bind mount at the repo-root `./data` directory (mapped to
 
 ```mermaid
 flowchart LR
-    SRC["Source\n(web upload or\nWhatsApp message)"]
-    -- "bytes + mime_type" --> BUILD["receipts.build_receipt_prompt()"]
+    SRC["Source<br/>(web upload or<br/>WhatsApp message)"] -- "bytes + mime_type" --> BUILD["receipts.build_receipt_prompt()"]
 
-    BUILD -- "image/*" --> OCR["vision.extract_text()\n(NVIDIA / Claude / OpenAI)"]
-    BUILD -- "application/pdf" --> PDF["PyMuPDF: render pages\n(cap 10) → PNG"]
-    PDF --> PAGES["OCR each page\nstore .preview.png\n(first page)"]
+    BUILD -- "image/*" --> OCR["vision.extract_text()<br/>(NVIDIA / Claude / OpenAI)"]
+    BUILD -- "application/pdf" --> PDF["PyMuPDF: render pages<br/>(cap 10) → PNG"]
+    PDF --> PAGES["OCR each page,<br/>store .preview.png<br/>(first page)"]
 
-    OCR --> PROMPT["composed prompt\n(OCR text + image_path)"]
+    OCR --> PROMPT["composed prompt<br/>(OCR text + image_path)"]
     PAGES --> PROMPT
 
-    PROMPT --> AGENT["Agent → record_transaction\n(image_path stored on txn)"]
-    AGENT --> DRIVE["optional: upload to\nDrive year subfolder"]
+    PROMPT --> AGENT["Agent → record_transaction<br/>(image_path stored on txn)"]
+    AGENT --> DRIVE["optional: upload to<br/>Drive year subfolder"]
 ```
 
 - Original file (image or PDF) is stored at `data/receipts/<filename>`.

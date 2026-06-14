@@ -93,18 +93,13 @@ Run both after every change. **Never commit on red.**
 `app/routes/` → register in `main.py`'s router loop → types + query in
 `web/src/api.ts` / page.
 
-**An agent tool** — executor + JSON schema in `app/agent/tools.py` (wrap body
-in try/except returning `{"error": ...}` — friendly degradation), append an
-`AgentTool` to the list returned by `build_tools`, mention it in
-`app/agent/prompts.py`. Tools that should only be available in the web UI
-(not WhatsApp) go inside the `if channel == "ui":` block — currently only
-`render_ui` is web-only. Current tools: `record_transaction` (optional `profile`;
-also `notes` + `receipt_link`), `update_transaction` / `delete_transaction`
-(by id), `query_transactions` (date/type/category/text/loan filters),
-`get_summary`, `manage_categories` / `manage_budgets` (optional `profile` to act
-on a specific book), `manage_recurring` (list/create/**update** (edit + pause/
-resume via `active`)/delete), `list_profiles`, `set_active_profile` (all
-channels), `render_ui` (ui only).
+**An agent tool** — add the executor + JSON schema in `app/agent/tools.py`
+(wrap the body in `try/except` returning `{"error": ...}` for friendly
+degradation), append an `AgentTool` to the list `build_tools` returns, and
+mention it in `app/agent/prompts.py`. Web-only tools (not exposed on WhatsApp)
+go inside the `if channel == "ui":` block — currently just `render_ui`. The
+existing tools are listed in
+[architecture.md → Agent runtime](architecture.md#agent-runtime).
 
 **A channel (Telegram etc.)** — implement `channels/base.BaseChannelRegistry`
 (`set_handler / start / list_accounts / send_weekly_summary`), normalize
