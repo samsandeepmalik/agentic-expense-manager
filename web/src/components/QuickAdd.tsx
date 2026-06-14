@@ -1,30 +1,38 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { get, post, type Category, type TaxProfile } from "../api";
+import { get, post, type Category } from "../api";
+import { CategoryPicker } from "./CategoryPicker";
 
 export function QuickAdd({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const categories = useQuery({ queryKey: ["categories"],
     queryFn: () => get<Category[]>("/api/categories") });
-  const profiles = useQuery({ queryKey: ["tax-profiles"],
-    queryFn: () => get<TaxProfile[]>("/api/tax-profiles") });
   const [form, setForm] = useState({ date: new Date().toISOString().slice(0, 10),
-    type: "expense", category: "", total: "", merchant: "", description: "",
-    loan: false });
+    type: "expense" as "income" | "expense", categoryId: null as number | null,
+    total: "", merchant: "", description: "", loan: false, notes: "" });
   const [error, setError] = useState("");
 
-  const selected = categories.data?.find((c) => c.name === form.category);
-  const active = profiles.data?.find((p) => p.is_active);
-  const total = parseFloat(form.total) || 0;
-  const rateSum = (active?.components ?? []).reduce((s, c) => s + c.rate, 0);
-  const taxPreview = selected?.taxable && total > 0 && active
-    ? active.components.map((c) => ({ name: c.name,
-        value: (total / (1 + rateSum / 100)) * (c.rate / 100) }))
-    : [];
+  const selected = categories.data?.find((c) => c.id === form.categoryId);
+  const totalNum = parseFloat(form.total);
+  const totalValid = !isNaN(totalNum) && totalNum > 0;
+
+  // Tax breakdown comes from the server (same _compute path used on save) so the
+  // preview can never diverge from what's actually recorded. No money math here.
+  const preview = useQuery({
+    queryKey: ["txn-preview", form.type, form.categoryId, totalNum],
+    enabled: totalValid && !!form.categoryId && !!selected?.taxable,
+    queryFn: () => post<{ breakdown: Record<string, number> }>(
+      "/api/transactions/preview",
+      { type: form.type, category_id: form.categoryId, total: totalNum }),
+  });
+  const taxPreview = Object.entries(preview.data?.breakdown ?? {})
+    .map(([name, value]) => ({ name, value }));
 
   const save = useMutation({
     mutationFn: () => post("/api/transactions",
-      { ...form, total: parseFloat(form.total) }),
+      { date: form.date, type: form.type, category_id: form.categoryId,
+        total: totalNum, merchant: form.merchant, description: form.description,
+        loan: form.loan, notes: form.notes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
@@ -33,40 +41,52 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
     onError: (e: Error) => setError(e.message),
   });
 
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
+    setForm((f) => ({ ...f, [k]: v }));
+
+  const totalRaw = form.total;
+  const showTotalHint = totalRaw !== "" && !totalValid;
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(45,42,36,.35)",
-                  display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}
-         onClick={onClose}>
+    <div className="overlay" onClick={onClose}>
       <div className="card" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ marginTop: 0 }}>Add transaction</h3>
-        {error && <p style={{ color: "var(--amber)" }}>{error}</p>}
+        <h3 className="section-title">Add transaction</h3>
+        {error && <p className="neg">{error}</p>}
         <div style={{ display: "grid", gap: 10 }}>
           <input type="date" value={form.date} onChange={(e) => set("date", e.target.value)} />
-          <select value={form.type} onChange={(e) => set("type", e.target.value)}>
+          <select value={form.type} onChange={(e) => {
+            set("type", e.target.value as "income" | "expense");
+            set("categoryId", null);
+          }}>
             <option value="expense">Expense</option><option value="income">Income</option>
           </select>
-          <select value={form.category} onChange={(e) => set("category", e.target.value)}>
-            <option value="">Category…</option>
-            {(categories.data ?? []).filter((c) => c.type === form.type)
-              .map((c) => <option key={c.id}>{c.name}</option>)}
-          </select>
+          <CategoryPicker
+            categories={categories.data ?? []}
+            type={form.type}
+            valueId={form.categoryId}
+            onChange={(id) => set("categoryId", id)}
+          />
           <input placeholder="Total paid ($)" inputMode="decimal" value={form.total}
                  onChange={(e) => set("total", e.target.value)} />
+          {showTotalHint && <p className="neg" style={{ margin: 0, fontSize: "0.85em" }}>Enter a valid amount.</p>}
           {taxPreview.length > 0 && (
             <p className="muted">Includes {taxPreview.map((t) =>
               `${t.name} $${t.value.toFixed(2)}`).join(" + ")}</p>)}
           {selected && !selected.taxable && <p className="muted">No tax for {selected.name}.</p>}
           <input placeholder="Merchant" value={form.merchant}
                  onChange={(e) => set("merchant", e.target.value)} />
-          <input placeholder="Note (optional)" value={form.description}
+          <input placeholder="Description (optional)" value={form.description}
                  onChange={(e) => set("description", e.target.value)} />
-          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <textarea placeholder="Notes (optional)" rows={2} value={form.notes}
+                    style={{ resize: "vertical" }}
+                    onChange={(e) => set("notes", e.target.value)} />
+          <label className="row">
             <input type="checkbox" checked={form.loan}
                    onChange={(e) => setForm((f) => ({ ...f, loan: e.target.checked }))} />
             Loan (money lent / borrowed)
           </label>
-          <button className="primary" disabled={!form.category || !total || save.isPending}
+          <button className="primary"
+                  disabled={!form.categoryId || !totalValid || save.isPending}
                   onClick={() => save.mutate()}>
             {save.isPending ? "Saving…" : "Save"}</button>
         </div>

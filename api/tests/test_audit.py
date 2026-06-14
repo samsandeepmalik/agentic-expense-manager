@@ -14,6 +14,20 @@ def test_transaction_writes_are_audited(conn):
     assert audit.recent(conn)[0]["event"] == "transaction_deleted"
 
 
+def test_bulk_delete_is_audited_per_transaction(conn):
+    a = txn_svc.create_transaction(conn, {
+        "date": "2026-06-05", "type": "expense", "category": "Groceries",
+        "total": 10.0})
+    b = txn_svc.create_transaction(conn, {
+        "date": "2026-06-05", "type": "expense", "category": "Groceries",
+        "total": 20.0})
+
+    txn_svc.bulk_action(conn, [a["id"], b["id"]], "delete")
+
+    deleted = [r for r in audit.recent(conn) if r["event"] == "transaction_deleted"]
+    assert {r["ref"] for r in deleted} == {str(a["id"]), str(b["id"])}
+
+
 def test_sync_failure_recorded(conn, db_path, monkeypatch):
     from app.services import sync
 

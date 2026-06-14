@@ -19,11 +19,21 @@ class AppError(Exception):
 
 
 def register_error_handler(app: FastAPI) -> None:
+    # Imported lazily: google_client imports this module (avoid a cycle).
+    from .services.google_client import GoogleNotConnectedError
+
     @app.exception_handler(AppError)
     async def _app_error(request: Request, exc: AppError):
         return JSONResponse(
             status_code=exc.status,
             content={"error": {"code": exc.code, "message": exc.message}},
+        )
+
+    @app.exception_handler(GoogleNotConnectedError)
+    async def _google_not_connected(request: Request, exc: GoogleNotConnectedError):
+        return JSONResponse(
+            status_code=409,
+            content={"error": {"code": "google_not_connected", "message": str(exc)}},
         )
 
     @app.exception_handler(Exception)

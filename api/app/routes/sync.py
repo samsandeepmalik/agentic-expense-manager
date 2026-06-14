@@ -16,4 +16,7 @@ async def sync_status():
 
 @router.post("/api/sync/now")
 async def sync_now():
-    return await asyncio.to_thread(svc.reconcile)
+    # _safe_reconcile records both success and errors to settings so the
+    # status endpoint always reflects the last attempt.
+    await asyncio.to_thread(svc._safe_reconcile)
+    return svc.status()

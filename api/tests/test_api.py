@@ -85,3 +85,22 @@ def test_quick_add_api(client):
 
     export = client.get("/api/transactions/export.csv")
     assert "Metro" in export.text
+
+
+def test_reupload_receipt_route_422_without_local_file(client):
+    created = client.post("/api/transactions", json={
+        "date": "2026-06-05", "type": "expense", "category": "Groceries",
+        "total": 50.0}).json()
+    response = client.post(f"/api/transactions/{created['id']}/reupload-receipt")
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "no_local_receipt"
+
+
+def test_preview_endpoint_returns_breakdown_without_persisting(client):
+    r = client.post("/api/transactions/preview",
+                    json={"type": "expense", "category": "Groceries", "total": 114.98})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["amount"] == 100.0
+    assert body["breakdown"] == {"GST": 5.0, "QST": 9.98}
+    assert client.get("/api/transactions").json() == []  # nothing was written

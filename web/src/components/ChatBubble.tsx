@@ -1,14 +1,18 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { post, type ChatSession } from "../api";
 import { ChatThread } from "./ChatThread";
 
 export function ChatBubble() {
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const create = useMutation({
     mutationFn: () => post<ChatSession>("/api/chat/sessions"),
     onSuccess: (s) => setSessionId(s.id) });
+
+  if (location.pathname === "/chat") return null;  // redundant on the Chat page
 
   const toggle = () => {
     if (!open && !sessionId) create.mutate();
@@ -17,14 +21,10 @@ export function ChatBubble() {
   return (
     <>
       {open && sessionId && (
-        <div className="card" style={{ position: "fixed", right: 24, bottom: 90,
-             width: 400, height: 520, zIndex: 40, display: "flex" }}>
+        <div className="card fab-panel">
           <ChatThread sessionId={sessionId} compact /></div>)}
-      <button onClick={toggle} style={{ position: "fixed", right: 24, bottom: 24,
-          width: 54, height: 54, borderRadius: 27, border: 0, fontSize: 22,
-          background: "var(--green)", color: "#fff", cursor: "pointer",
-          boxShadow: "var(--shadow)", zIndex: 40 }}>
-        {open ? "✕" : "💬"}</button>
+      <button className="fab" aria-label={open ? "Close chat" : "Open chat"}
+              onClick={toggle}>{open ? "✕" : "💬"}</button>
     </>
   );
 }

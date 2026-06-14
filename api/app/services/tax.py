@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 import sqlite3
 
+from . import profiles as prof_svc
+
 
 def back_calculate(total: float, components: list[dict], taxable: bool) -> dict:
     if not taxable or not components:
@@ -18,8 +20,9 @@ def back_calculate(total: float, components: list[dict], taxable: bool) -> dict:
     return {"amount": round(amount, 2), "breakdown": breakdown}
 
 
-def active_components(conn: sqlite3.Connection) -> list[dict]:
+def active_components(conn: sqlite3.Connection, profile_id: int | None = None) -> list[dict]:
+    pid = profile_id if profile_id is not None else prof_svc.active_id(conn)
     row = conn.execute(
-        "SELECT components FROM tax_profiles WHERE is_active=1"
-    ).fetchone()
+        "SELECT components FROM tax_profiles WHERE is_active=1 AND profile_id=?",
+        (pid,)).fetchone()
     return json.loads(row["components"]) if row else []

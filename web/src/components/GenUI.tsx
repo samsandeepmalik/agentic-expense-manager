@@ -17,11 +17,8 @@ import {
   YAxis,
 } from "recharts";
 import type { UiComponentSpec, UiSpec } from "../api";
-
-const PALETTE = [
-  "#3a8f63", "#c2742c", "#7a9e7e", "#d9a85c", "#a08c6a",
-  "#5e8ca7", "#b56a5d", "#8a7ba8",
-];
+import { useChartColors } from "../useTheme";
+import { LEGEND_STYLE, TOOLTIP_STYLE } from "./Charts";
 
 function MetricCard({ spec }: { spec: UiComponentSpec }) {
   return (
@@ -39,6 +36,7 @@ function MetricCard({ spec }: { spec: UiComponentSpec }) {
 }
 
 function ChartBlock({ spec }: { spec: UiComponentSpec }) {
+  const { palette, ink, hairline } = useChartColors();
   const data = spec.data ?? [];
   const xKey = spec.xKey ?? "name";
   const series = spec.series ?? [];
@@ -48,13 +46,13 @@ function ChartBlock({ spec }: { spec: UiComponentSpec }) {
     return (
       <ResponsiveContainer width="100%" height={260}>
         <PieChart>
-          <Pie data={data} dataKey={valueKey} nameKey={xKey} outerRadius={95} label>
+          <Pie data={data} dataKey={valueKey} nameKey={xKey} outerRadius={95} label isAnimationActive={false}>
             {data.map((_, index) => (
-              <Cell key={index} fill={PALETTE[index % PALETTE.length]} />
+              <Cell key={index} fill={palette[index % palette.length]} />
             ))}
           </Pie>
-          <Tooltip />
-          <Legend />
+          <Tooltip contentStyle={TOOLTIP_STYLE} />
+          <Legend wrapperStyle={LEGEND_STYLE} />
         </PieChart>
       </ResponsiveContainer>
     );
@@ -64,19 +62,20 @@ function ChartBlock({ spec }: { spec: UiComponentSpec }) {
     return (
       <ResponsiveContainer width="100%" height={260}>
         <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#efe9de" />
-          <XAxis dataKey={xKey} stroke="#a08c6a" />
-          <YAxis stroke="#a08c6a" />
-          <Tooltip />
-          <Legend />
+          <CartesianGrid strokeDasharray="3 3" stroke={hairline} />
+          <XAxis dataKey={xKey} stroke={ink} />
+          <YAxis stroke={ink} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} />
+          <Legend wrapperStyle={LEGEND_STYLE} />
           {series.map((key, index) => (
             <Line
               key={key}
               type="monotone"
               dataKey={key}
-              stroke={PALETTE[index % PALETTE.length]}
+              stroke={palette[index % palette.length]}
               strokeWidth={2}
               dot={false}
+              isAnimationActive={false}
             />
           ))}
         </LineChart>
@@ -87,13 +86,13 @@ function ChartBlock({ spec }: { spec: UiComponentSpec }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#efe9de" />
-        <XAxis dataKey={xKey} stroke="#a08c6a" />
-        <YAxis stroke="#a08c6a" />
-        <Tooltip />
-        <Legend />
+        <CartesianGrid strokeDasharray="3 3" stroke={hairline} />
+        <XAxis dataKey={xKey} stroke={ink} />
+        <YAxis stroke={ink} />
+        <Tooltip contentStyle={TOOLTIP_STYLE} />
+        <Legend wrapperStyle={LEGEND_STYLE} />
         {series.map((key, index) => (
-          <Bar key={key} dataKey={key} fill={PALETTE[index % PALETTE.length]} radius={[4, 4, 0, 0]} />
+          <Bar key={key} dataKey={key} fill={palette[index % palette.length]} radius={[0, 0, 0, 0]} isAnimationActive={false} />
         ))}
       </BarChart>
     </ResponsiveContainer>

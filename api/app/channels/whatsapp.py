@@ -266,6 +266,13 @@ class WhatsAppManager:
             text = text or message.imageMessage.caption or ""
             image_bytes = await self._client.download_any(message)
 
+        if not image_bytes and message.HasField("documentMessage"):
+            doc_mime = message.documentMessage.mimetype or "application/octet-stream"
+            if "pdf" in doc_mime or doc_mime.startswith("image/"):
+                image_mime = doc_mime
+                text = text or message.documentMessage.caption or ""
+                image_bytes = await self._client.download_any(message)
+
         if not text and not image_bytes:
             return
 

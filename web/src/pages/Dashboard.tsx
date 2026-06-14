@@ -1,19 +1,31 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { get, type Dashboard as DashboardData } from "../api";
 import { BudgetRail } from "../components/BudgetRail";
 import { CategoryPie, TrendChart } from "../components/Charts";
 import { QuickAdd } from "../components/QuickAdd";
 import { RecentTable } from "../components/RecentTable";
+import { money, signedMoney } from "../format";
 
-function Metric({ label, value, tone }: { label: string; value: string; tone?: string }) {
-  return (
-    <div className="card" style={{ flex: 1, textAlign: "center" }}>
-      <div className="muted" style={{ textTransform: "uppercase", fontSize: 11,
-                                      letterSpacing: ".06em" }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: tone }}>{value}</div>
-    </div>
-  );
+// NET tick-up: 0 -> target in ~400ms. Respects prefers-reduced-motion.
+function useCountUp(target: number, ms = 400) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setValue(target); return;
+    }
+    setValue(0);
+    let raf = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const p = Math.min((now - start) / ms, 1);
+      setValue(target * p);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms]);
+  return value;
 }
 
 export default function Dashboard({ period }: { period: string }) {
@@ -23,29 +35,43 @@ export default function Dashboard({ period }: { period: string }) {
     refetchInterval: 15000,
     queryFn: () => get<DashboardData>(`/api/dashboard?period=${period}`),
   });
-  if (isLoading || !data) return <div className="card">Loading…</div>;
+  // Rules of Hooks: must be called before early return. 0 while loading, animates when data arrives.
+  const net = useCountUp(data?.metrics.net ?? 0);
+  if (isLoading || !data) return <div className="card lbl">Loading…</div>;
   const { metrics } = data;
   return (
-    <div style={{ display: "flex", gap: 16 }}>
-      <div style={{ flex: 3, display: "flex", flexDirection: "column", gap: 16 }}>
-        <div style={{ display: "flex", gap: 16 }}>
-          <Metric label="Income" value={`$${metrics.income.toFixed(2)}`} tone="var(--green)" />
-          <Metric label="Expenses" value={`$${metrics.expenses.toFixed(2)}`} tone="var(--amber)" />
-          <Metric label="Net" value={`$${metrics.net.toFixed(2)}`} />
-          <div className="card" style={{ flex: 1, display: "flex", alignItems: "center",
-                                         justifyContent: "center" }}>
-            <button className="primary" onClick={() => setAdding(true)}>＋ Quick add</button>
-          </div>
+    <div className="stack reveal">
+      <div className="hero">
+        <div>
+          <div className="lbl">Income</div>
+          <div className="mono hero-side pos">{money(metrics.income)}</div>
         </div>
-        <div style={{ display: "flex", gap: 16 }}>
-          <div className="card" style={{ flex: 3 }}>
-            <b>Income vs expenses</b><TrendChart data={data.trend} /></div>
-          <div className="card" style={{ flex: 2 }}>
-            <b>Expenses by category</b><CategoryPie data={data.by_category} /></div>
+        <div className="hero-net">
+          <div className="lbl">Net</div>
+          <div className="mono hero-big">{signedMoney(net)}</div>
+          <button className="primary" onClick={() => setAdding(true)}>+ Quick add</button>
         </div>
-        <RecentTable rows={data.recent} />
+        <div>
+          <div className="lbl">Expenses</div>
+          <div className="mono hero-side neg">{money(metrics.expenses)}</div>
+        </div>
       </div>
-      <div style={{ flex: 1 }}><BudgetRail budgets={data.budgets} /></div>
+      <div className="muted" style={{ textAlign: "center", fontSize: "0.75rem", marginTop: "-8px" }}
+           title="Counted = the attributable share of each transaction after applying the category's % (e.g. 50% business-use). Not necessarily dollars paid.">
+        Figures show <em>counted</em> amounts — category&nbsp;% applied
+      </div>
+      <div className="card">
+        <div className="lbl">Flow — last 6 months</div>
+        <TrendChart data={data.trend} />
+      </div>
+      <div className="split2">
+        <div className="card">
+          <div className="lbl">By category</div>
+          <CategoryPie data={data.by_category} />
+        </div>
+        <BudgetRail budgets={data.budgets} />
+      </div>
+      <RecentTable rows={data.recent} />
       {adding && <QuickAdd onClose={() => setAdding(false)} />}
     </div>
   );

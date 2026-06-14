@@ -1,10 +1,12 @@
 export interface Category { id: number; name: string; type: "income" | "expense";
-  percent: number; taxable: boolean; budget_monthly: number | null; }
+  percent: number; taxable: boolean; budget_monthly: number | null;
+  parent_id: number; profile_id: number; }
 export interface Txn { id: number; date: string; type: string; category: string;
+  category_id: number; category_parent: string | null; category_percent: number;
   description: string; merchant: string; amount: number;
   tax_breakdown: Record<string, number>; total: number; counted: number;
   image_path: string | null; source: string; sync_status: string;
-  loan: boolean; receipt_link: string | null; }
+  loan: boolean; receipt_link: string | null; notes: string; }
 export interface Budget { name: string; budget: number; spent: number; pct: number; }
 export interface Dashboard {
   period: { start: string; end: string };
@@ -21,13 +23,17 @@ export interface RecurringRule { id: number; template: Record<string, unknown>;
 export interface WaAccount { id: string; device: string; status: string;
   qr: string | null; }
 export interface AuditRow { id: number; ts: string; channel: string;
-  event: string; ref: string; detail: string; }
+  event: string; ref: string; detail: string;
+  profile_id?: number | null; }
 export interface ImportRecord { id: number; filename: string; status: string;
   error: string | null;
+  profile_id?: number;
   rows: { date: string; type: string; category: string; merchant: string;
           description: string; total: number; duplicate: boolean; skip: boolean;
+          loan?: boolean; notes?: string; category_id?: number | null;
           receipt_link?: string | null; }[]; }
-export interface DriveFolder { id: string; name: string; }
+export interface Profile { id: number; name: string;
+  kind: "personal" | "incorporation" | "other"; active: boolean; }
 export interface UiComponentSpec { type: string; title?: string; label?: string;
   value?: number | string; unit?: string; data?: Record<string, unknown>[];
   xKey?: string; series?: string[]; columns?: string[]; rows?: unknown[][]; }
@@ -51,6 +57,9 @@ export const post = <T,>(url: string, body?: unknown) =>
     body: body === undefined ? undefined : JSON.stringify(body) }).then((r) => handle<T>(r));
 export const patch = <T,>(url: string, body: unknown) =>
   fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body) }).then((r) => handle<T>(r));
+export const put = <T,>(url: string, body: unknown) =>
+  fetch(url, { method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body) }).then((r) => handle<T>(r));
 export const del = <T,>(url: string) =>
   fetch(url, { method: "DELETE" }).then((r) => handle<T>(r));

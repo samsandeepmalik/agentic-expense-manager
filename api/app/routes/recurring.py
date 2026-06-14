@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from ..db import get_db
 from ..services import recurring as svc
+from ..services import profiles as prof_svc
 
 router = APIRouter()
 
@@ -40,11 +41,12 @@ async def create_rule(body: RuleIn):
 async def update_rule(rule_id: int, body: RulePatch):
     changes = {k: v for k, v in body.model_dump().items() if v is not None}
     with get_db() as conn:
-        return svc.update_rule(conn, rule_id, changes)
+        return svc.update_rule(conn, rule_id, changes,
+                               profile_id=prof_svc.active_id(conn))
 
 
 @router.delete("/api/recurring/{rule_id}")
 async def delete_rule(rule_id: int):
     with get_db() as conn:
-        svc.delete_rule(conn, rule_id)
+        svc.delete_rule(conn, rule_id, profile_id=prof_svc.active_id(conn))
     return {"ok": True}

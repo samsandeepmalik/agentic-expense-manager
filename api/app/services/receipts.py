@@ -6,12 +6,34 @@ can act on (it then calls record_transaction with structured fields).
 
 from __future__ import annotations
 
-import asyncio
+import logging
+import re
 import uuid
 from datetime import datetime, timezone
 
 from ..config import config
+from . import google_client as gc
 from . import vision
+
+logger = logging.getLogger(__name__)
+
+_PDF_MAX_PAGES = 10
+
+
+def _pdf_to_page_images(data: bytes) -> list[bytes]:
+    """Render up to _PDF_MAX_PAGES pages of a PDF to PNG bytes (2x zoom)."""
+    import fitz
+
+    images: list[bytes] = []
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        total = doc.page_count
+        for index in range(min(total, _PDF_MAX_PAGES)):
+            pix = doc.load_page(index).get_pixmap(matrix=fitz.Matrix(2, 2))
+            images.append(pix.tobytes("png"))
+    if total > _PDF_MAX_PAGES:
+        logger.info("PDF receipt truncated: %d of %d pages rendered",
+                    _PDF_MAX_PAGES, total)
+    return images
 
 
 async def build_receipt_prompt(
@@ -21,21 +43,33 @@ async def build_receipt_prompt(
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     filename = f"receipt-{timestamp}-{uuid.uuid4().hex[:6]}.{extension}"
 
-    ocr_task = asyncio.create_task(vision.extract_text(image_bytes, mime_type))
-
     receipts_dir = config.data_dir / "receipts"
     receipts_dir.mkdir(parents=True, exist_ok=True)
     image_path = receipts_dir / filename
     image_path.write_bytes(image_bytes)
 
-    # OCR failure degrades gracefully: the image is still stored and the agent
-    # can ask the user for the missing details.
     ocr_error = ""
-    try:
-        ocr_text = await ocr_task
-    except Exception as exc:  # noqa: BLE001
-        ocr_text = ""
-        ocr_error = str(exc)
+    if mime_type == "application/pdf":
+        # Render pages -> OCR each -> store first page as a preview image for the UI.
+        try:
+            pages = _pdf_to_page_images(image_bytes)
+            if pages:
+                preview_path = image_path.with_suffix(".preview.png")
+                preview_path.write_bytes(pages[0])
+            texts = []
+            for number, page_png in enumerate(pages, start=1):
+                texts.append(f"--- page {number} ---")
+                texts.append(await vision.extract_text(page_png, "image/png"))
+            ocr_text = "\n".join(texts)
+        except Exception as exc:  # noqa: BLE001
+            ocr_text = ""
+            ocr_error = str(exc)
+    else:
+        try:
+            ocr_text = await vision.extract_text(image_bytes, mime_type)
+        except Exception as exc:  # noqa: BLE001
+            ocr_text = ""
+            ocr_error = str(exc)
 
     parts = [
         "The user submitted a receipt image.",
@@ -54,9 +88,6 @@ async def build_receipt_prompt(
     )
     return "\n".join(parts)
 
-
-import re  # noqa: E402 — appended block
-from . import google_client as gc  # noqa: E402
 
 _FILE_ID_RES = (re.compile(r"/file/d/([A-Za-z0-9_-]+)"),
                 re.compile(r"[?&]id=([A-Za-z0-9_-]+)"))

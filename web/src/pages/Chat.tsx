@@ -25,36 +25,38 @@ export default function Chat() {
     } });
 
   return (
-    <div style={{ display: "flex", gap: 16, height: "calc(100vh - 130px)" }}>
+    <div className="row" style={{ alignItems: "stretch", height: "calc(100vh - 130px)" }}>
       <div className="card" style={{ width: 260, overflowY: "auto" }}>
         <button className="primary" style={{ width: "100%" }}
-                onClick={() => create.mutate()}>＋ New chat</button>
+                onClick={() => create.mutate()}>+ New chat</button>
+        {(sessions.data ?? []).length > 0 && (
+          <p className="lbl muted chat-side-head">
+            Chats <span className="mono">{sessions.data!.length}</span></p>)}
         {(sessions.data ?? []).map((s) => (
           <div key={s.id} onClick={() => setActive(s.id)}
-               style={{ padding: "10px 8px", borderRadius: 10, cursor: "pointer",
-                        marginTop: 6, display: "flex", justifyContent: "space-between",
-                        background: active === s.id ? "var(--green-soft)" : "transparent" }}>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis",
-                           whiteSpace: "nowrap" }}>{s.title}</span>
-            <button className="ghost" style={{ color: "var(--amber)" }}
+               className={`chatitem${active === s.id ? " invert" : ""}`}>
+            <span className="chatitem-title">{s.title}</span>
+            <button className="ghost danger del" aria-label="Delete chat"
                     onClick={(e) => { e.stopPropagation(); remove.mutate(s.id); }}>✕</button>
           </div>))}
         {(waSessions.data ?? []).length > 0 && (
-          <p className="muted" style={{ margin: "14px 0 2px" }}>WhatsApp</p>)}
+          <p className="lbl muted chat-side-head">
+            WhatsApp <span className="mono">{waSessions.data!.length}</span></p>)}
         {(waSessions.data ?? []).map((s) => (
           <div key={s.id} onClick={() => setActive(s.id)}
-               style={{ padding: "10px 8px", borderRadius: 10, cursor: "pointer",
-                        marginTop: 6, display: "flex", gap: 6, alignItems: "center",
-                        background: active === s.id ? "var(--green-soft)" : "transparent" }}>
+               className={`chatitem${active === s.id ? " invert" : ""}`}>
             <span>💬</span>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis",
-                           whiteSpace: "nowrap" }}>{s.title}</span>
+            <span className="chatitem-title grow">{s.title}</span>
           </div>))}
       </div>
-      <div className="card" style={{ flex: 1 }}>
+      <div className="card grow" style={{ display: "flex" }}>
         {active ? <ChatThread key={active} sessionId={active} readOnly={isWa} />
-          : <p className="muted" style={{ textAlign: "center", marginTop: 80 }}>
-              Pick a chat or start a new one.</p>}
+          : <div className="chat-empty">
+              <p className="mono chat-prompt">&gt; ASK ANYTHING ABOUT YOUR MONEY_</p>
+              <p className="muted">Record expenses, query totals, drop receipt photos.</p>
+              <button className="primary" onClick={() => create.mutate()}>
+                + Start a chat</button>
+            </div>}
       </div>
     </div>
   );

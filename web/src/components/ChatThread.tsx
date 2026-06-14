@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { get, streamChat, type ChatEvent, type UiSpec } from "../api";
-import { GenUI } from "./GenUI";
+
+// GenUI pulls in recharts; load it only when the agent actually renders a spec,
+// keeping the chart library out of the initial bundle.
+const GenUI = lazy(() => import("./GenUI").then((m) => ({ default: m.GenUI })));
 
 interface Item { role: "user" | "assistant"; text: string;
   uiSpecs?: UiSpec[]; tools?: string[]; }
+
+const EXAMPLES = [
+  "What are my expenses this month?",
+  "Add $12.50 coffee at Starbucks",
+  "Show spending by category",
+];
 
 export function ChatThread({ sessionId, compact = false, readOnly = false }:
     { sessionId: string; compact?: boolean; readOnly?: boolean }) {
@@ -54,37 +63,42 @@ export function ChatThread({ sessionId, compact = false, readOnly = false }:
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div ref={scroller} style={{ flex: 1, overflowY: "auto", display: "flex",
-                                   flexDirection: "column", gap: 10, padding: 4 }}>
-        {items.length === 0 && (
-          <p className="muted" style={{ margin: "auto", textAlign: "center" }}>
-            Ask “what are my expenses this month?” or drop a receipt photo.</p>)}
+    <div className="grow" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div ref={scroller} className="chat-scroll">
+        {items.length === 0 && !readOnly && (
+          <div className="chat-empty">
+            <p className="mono chat-prompt">&gt; ASK ANYTHING ABOUT YOUR MONEY</p>
+            <div className="row" style={{ flexWrap: "wrap", justifyContent: "center" }}>
+              {EXAMPLES.map((q) => (
+                <button key={q} className="ghost" onClick={() => setInput(q)}>{q}</button>))}
+            </div>
+          </div>)}
+        {items.length === 0 && readOnly && (
+          <p className="muted" style={{ margin: "auto" }}>No messages yet.</p>)}
         {items.map((item, index) => (
-          <div key={index} style={{
-            alignSelf: item.role === "user" ? "flex-end" : "flex-start",
-            background: item.role === "user" ? "var(--green)" : "#fff",
-            color: item.role === "user" ? "#fff" : "var(--text)",
-            borderRadius: 14, padding: "10px 14px",
-            maxWidth: compact ? "95%" : "80%", whiteSpace: "pre-wrap",
-            boxShadow: "var(--shadow)" }}>
-            {(item.tools ?? []).length > 0 && (
-              <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
-                ⚙ {(item.tools ?? []).join(" · ")}</div>)}
+          <div key={index}
+               className={`bubble ${item.role === "user" ? "user" : "agent"}${compact ? " compact" : ""}`}>
+            <div className="bubble-meta lbl">
+              {item.role === "user" ? "You" : "Agent"}
+              {(item.tools ?? []).length > 0 && <> · ⚙ {(item.tools ?? []).join(" · ")}</>}
+            </div>
             {item.text || (busy && index === items.length - 1 ? "…" : "")}
-            {(item.uiSpecs ?? []).map((spec, i) => <GenUI key={i} spec={spec} />)}
+            {(item.uiSpecs ?? []).length > 0 && (
+              <Suspense fallback={<span className="muted">…</span>}>
+                {(item.uiSpecs ?? []).map((spec, i) => <GenUI key={i} spec={spec} />)}
+              </Suspense>)}
           </div>))}
       </div>
       {readOnly && (
-        <p className="muted" style={{ textAlign: "center", paddingTop: 8 }}>
+        <p className="lbl muted" style={{ textAlign: "center", paddingTop: 8 }}>
           WhatsApp conversation — reply from your phone.</p>)}
-      {!readOnly && <div style={{ display: "flex", gap: 8, paddingTop: 10 }}>
-        <label style={{ cursor: "pointer", fontSize: 20, alignSelf: "center" }}>📷
-          <input type="file" accept="image/*" hidden
+      {!readOnly && <div className="row chat-inputrow">
+        <label style={{ cursor: "pointer", fontSize: 20 }}>📷
+          <input type="file" accept="image/*,application/pdf" hidden
                  onChange={(e) => setImage(e.target.files?.[0] ?? null)} /></label>
-        {image && <span className="muted" style={{ alignSelf: "center" }}>{image.name}</span>}
-        <input style={{ flex: 1 }} value={input} disabled={busy}
-               placeholder="Message or receipt details…"
+        {image && <span className="muted">{image.name}</span>}
+        <input className="grow" value={input} disabled={busy}
+               placeholder="MESSAGE OR RECEIPT DETAILS…"
                onChange={(e) => setInput(e.target.value)}
                onKeyDown={(e) => e.key === "Enter" && send()} />
         <button className="primary" disabled={busy || (!input.trim() && !image)}

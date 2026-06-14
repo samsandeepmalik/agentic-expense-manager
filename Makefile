@@ -20,9 +20,16 @@ stop: ## Stop all containers (state is kept)
 
 restart: stop start ## Stop then start
 
-cleanup: ## Remove containers, volumes (Google/WhatsApp sessions!) and images
-	docker compose down -v --rmi local
-	rm -rf api/data web/dist
+cleanup: ## Remove containers + images. Your data in ./data is PRESERVED.
+	docker compose down --rmi local
+	rm -rf web/dist
+	@echo ""
+	@echo "🔒 Data preserved at ./data (expense.db, receipts/, whatsapp/)."
+	@echo "   To wipe it too: make cleanup-data"
+
+cleanup-data: ## DESTRUCTIVE: also delete ./data (DB + receipts + WhatsApp pairing)
+	rm -rf data
+	@echo "🗑  ./data removed."
 
 logs: ## Follow logs from all services
 	docker compose logs -f
@@ -39,7 +46,7 @@ status: ## Show container status
 # --- Local development (without Docker) ------------------------------------
 
 dev-api: ## Run API locally with hot reload (poetry install --no-root, libmagic)
-	cd api && poetry run uvicorn app.main:app --reload --port 8000
+	cd api && DATA_DIR=$(PWD)/data poetry run uvicorn app.main:app --reload --port 8000
 
 dev-web: ## Run web UI dev server locally (npm install first)
 	cd web && npm run dev

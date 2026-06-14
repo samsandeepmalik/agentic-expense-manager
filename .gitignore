@@ -3,9 +3,19 @@ dist/
 .env
 server/data/
 api/data/
+/data/
+api/data.local-testseed.bak/
 *.log
 .DS_Store
 .superpowers/
 .omc/
 __pycache__/
 *.pyc
+client_secret*.json
+web/.omc/*
+
+# internal / AI-tooling artifacts
+goal.md
+docs/arch-review-*.md
+docs/superpowers/
+.playwright-mcp/
