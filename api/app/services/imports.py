@@ -80,8 +80,29 @@ async def parse_with_agent(text: str, profile_id: int) -> list[dict]:
     return json.loads(match.group(0))
 
 
+def _persist_import(conn, filename: str, rows: list[dict], profile_id: int,
+                    channel: str = "import") -> int:
+    """Persist parsed rows as a review-ready import. Flags duplicates and
+    initialises per-row skip. Does NOT commit — the caller's get_db() context
+    manager owns the transaction boundary. Returns the new import id."""
+    flags = dedup_svc.flag_duplicates(conn, rows, profile_id=profile_id)
+    for row, flag in zip(rows, flags):
+        row["duplicate"] = flag
+        row["skip"] = flag
+    cursor = conn.execute(
+        "INSERT INTO imports(filename, profile_id, channel, status, rows) "
+        "VALUES (?,?,?,'review',?)",
+        (filename, profile_id, channel, json.dumps(rows)))
+    import_id = cursor.lastrowid
+    audit.record(conn, "import_uploaded", channel=channel, ref=str(import_id),
+                 detail=f"{filename}: {len(rows)} rows parsed",
+                 profile_id=profile_id)
+    return import_id
+
+
 async def start_import(filename: str, data: bytes,
-                       profile_id: int | None = None) -> dict:
+                       profile_id: int | None = None,
+                       channel: str = "import") -> dict:
     text = extract_text(filename, data)
     with get_db() as conn:
         # Explicit profile (chosen in the import popup) wins; else active book.
@@ -90,28 +111,21 @@ async def start_import(filename: str, data: bytes,
             profile_id = prof_svc.active_id(conn)
         else:
             prof_svc.get_profile(conn, profile_id)  # raises profile_not_found
-        cursor = conn.execute(
-            "INSERT INTO imports(filename, profile_id) VALUES (?,?)",
-            (filename, profile_id))
-        import_id = cursor.lastrowid
+    import_id: int | None = None
     try:
         rows = await parse_with_agent(text, profile_id)
         with get_db() as conn:
-            flags = dedup_svc.flag_duplicates(conn, rows, profile_id=profile_id)
-            for row, flag in zip(rows, flags):
-                row["duplicate"] = flag
-                row["skip"] = flag
-            conn.execute("UPDATE imports SET status='review', rows=? WHERE id=?",
-                         (json.dumps(rows), import_id))
-            audit.record(conn, "import_uploaded", channel="import",
-                         ref=str(import_id),
-                         detail=f"{filename}: {len(rows)} rows parsed",
-                         profile_id=profile_id)
+            import_id = _persist_import(conn, filename, rows, profile_id, channel)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Import parse failed")
         with get_db() as conn:
-            conn.execute("UPDATE imports SET status='failed', error=? WHERE id=?",
-                         (str(exc), import_id))
+            cursor = conn.execute(
+                "INSERT INTO imports(filename, profile_id, channel, status, error, rows) "
+                "VALUES (?,?,?,'failed',?,?)",
+                (filename, profile_id, channel, str(exc), json.dumps([])))
+            import_id = cursor.lastrowid
+    if import_id is None:
+        raise AppError("import_failed", "Import could not be recorded", 500)
     return get_import(import_id)
 
 
