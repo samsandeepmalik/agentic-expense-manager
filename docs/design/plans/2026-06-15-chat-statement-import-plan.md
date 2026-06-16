@@ -436,42 +436,53 @@ git commit -m "feat(api): classify_and_start — route chat uploads to receipt v
 
 - [ ] **Step 1: Write the failing test**
 
+VERIFIED against the repo: `init_db()` takes NO arg (uses `db.DB_PATH`/`config.data_dir`). The legacy-migration tests set `DATA_DIR` env + assign `db.DB_PATH`, then call `init_db()`. Mirror that exact pattern. `imports` legacy shape (no `channel`):
+
 ```python
 # api/tests/test_legacy_migration.py  (add)
-def test_imports_channel_migration(tmp_path):
+def test_init_db_adds_channel_to_legacy_imports(tmp_path, monkeypatch):
     import sqlite3
-    from app import db
-    path = tmp_path / "legacy.db"
-    conn = sqlite3.connect(path)
+    db_file = tmp_path / "chan.db"
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    conn = sqlite3.connect(db_file)
     conn.executescript(
-        "CREATE TABLE imports(id INTEGER PRIMARY KEY, filename TEXT, "
-        "profile_id INTEGER NOT NULL DEFAULT 1, status TEXT DEFAULT 'review', "
-        "error TEXT, rows TEXT DEFAULT '[]');")
+        "CREATE TABLE imports (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "filename TEXT NOT NULL, status TEXT DEFAULT 'parsing', "
+        "rows TEXT DEFAULT '[]', error TEXT, "
+        "profile_id INTEGER NOT NULL DEFAULT 1, created_at TEXT);")
     conn.commit(); conn.close()
-    db.init_db(str(path))   # runs idempotent migrations
-    conn = sqlite3.connect(path)
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(imports)")}
-    assert "channel" in cols
-```
 
-(Match the real `init_db` signature/usage in this repo; if `init_db` takes no path arg, set `DATA_DIR`/use the existing legacy-test pattern in this file.)
+    from app import db
+    db.DB_PATH = db_file
+    db.init_db()   # must NOT raise; runs idempotent migrations
+
+    conn = sqlite3.connect(db_file); conn.row_factory = sqlite3.Row
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(imports)")}
+    assert "channel" in cols
+    conn.close()
+```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd api && poetry run pytest tests/test_legacy_migration.py::test_imports_channel_migration -v`
+Run: `cd api && poetry run pytest tests/test_legacy_migration.py::test_init_db_adds_channel_to_legacy_imports -v`
 Expected: FAIL — `assert 'channel' in cols`
 
 - [ ] **Step 3: Add column to `SCHEMA` and an idempotent migration**
 
-In `db.py` `SCHEMA`, add to the `imports` table definition: `channel TEXT DEFAULT 'import'`.
+In `db.py` `SCHEMA`, add to the `imports` table (after `profile_id ... ,`):
+```
+  channel TEXT NOT NULL DEFAULT 'import',
+```
+(`NOT NULL` + a constant default is legal in `ADD COLUMN` — only `REFERENCES` + non-NULL default is forbidden, which is why `profile_id` dropped its FK in the migration.)
 
-In the `init_db` migration block:
+In `init_db`, right after the existing imports `profile_id` migration (which already computes `import_cols = {r["name"] for r in conn.execute("PRAGMA table_info(imports)")}` at db.py:185):
 
 ```python
-cols = {r[1] for r in conn.execute("PRAGMA table_info(imports)")}
-if "channel" not in cols:
-    conn.execute("ALTER TABLE imports ADD COLUMN channel TEXT DEFAULT 'import'")
+        if "channel" not in import_cols:
+            conn.execute("ALTER TABLE imports ADD COLUMN "
+                         "channel TEXT NOT NULL DEFAULT 'import'")
 ```
+(`import_cols` is already in scope from the profile_id migration; `channel` is absent in legacy DBs so the stale set is fine.)
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -921,6 +932,6 @@ git add -A && git commit -m "docs: note chat statement import flow"
 
 - **Spec coverage:** §3 routing → Task 4/7; §5 migration → Task 9; §6 tools → Task 5; §7 flow → Tasks 5–7; §8 gates → Task 6; §9 errors → Tasks 4/7; §10 idempotency/dedup → Tasks 1/3 (reuse `external_ref`, `flag_duplicates`); §12 testing → every task is TDD; §13 WhatsApp explicitly out of scope (no task). Covered.
 - **Ordering caveat:** Task 9 (migration) must precede Task 1 — flagged at both tasks.
-- **Signature checks to confirm against the live code during execution:** `db.init_db` arg shape (Task 9 test), prompt builder export name in `prompts.py` (Task 6 test), `cat_svc.get_category` raising on cross-profile (used in Task 3). Adjust the test harness lines to match; the production code is exact.
+- **Signatures VERIFIED against live code:** `init_db()` takes no arg (uses `db.DB_PATH`); conftest sets `DATA_DIR` + `db.DB_PATH` so service `get_db()` and the `conn` fixture share the temp DB (async classify tests are safe). `system_prompt(channel)` is the exact prompt export (Task 6). `imports` SCHEMA columns confirmed (`id, filename, status, rows, error, profile_id, created_at`) — `_persist_import` INSERT supplies all NOT-NULL columns. Migration block at db.py:185 already builds `import_cols` with `r["name"]`; the `channel` migration reuses it. `cat_svc.get_category` returns a dict incl. `profile_id` (used by `bulk_action`), so the cross-profile guard in Task 3 holds.
 - **No new types referenced that aren't defined here.** `imp_svc`/`imports_svc` import aliases are introduced where used.
 ```
