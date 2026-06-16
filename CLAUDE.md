@@ -60,7 +60,11 @@ api/app/
                            UNIQUE(name, profile_id, parent_id)
     profiles.py            CRUD + active_id(conn); all services scope to active
     receipts.py            OCR intake (image/PDF→prompt; PyMuPDF renders PDF pages to PNG) AND lazy Drive download
-    imports.py             statement upload → agent parses rows → review/approve
+    imports.py             statement upload → agent parses rows → review/approve.
+                           classify_and_start routes a CHAT upload (receipt vs
+                           statement); import_summary + remap_import drive the
+                           in-chat flow; _persist_import shared; `channel` column
+                           marks chat-originated imports
     sync.py                one-way Google push; request_sync()/sync_worker() debounce.
                            Per-profile configurable columns (COLUMN_REGISTRY +
                            SHEET_COLUMN_CONFIG); frozen TOTALS row at top (row 2,
@@ -77,7 +81,9 @@ api/app/
     anthropic_provider.py  Claude Max OAuth provider — PROTECTED
     tools.py               record/update/delete_transaction, query, get_summary,
                            manage_* (recurring has update), list_profiles,
-                           set_active_profile (all channels), render_ui (ui only).
+                           set_active_profile (all channels),
+                           get_import_summary/remap_import/approve_import
+                           (chat statement import), render_ui (ui only).
                            EVERY data tool takes optional `profile` name → act on
                            another book WITHOUT switching active. record_transaction
                            takes `confirm_duplicate` (override the dup warning)
@@ -118,11 +124,18 @@ web/src/
   category/sub-category; tools: `list_profiles`, `set_active_profile`. To read/
   write a NON-active book the agent passes `profile` per call (never switches
   active). On a duplicate the tool returns `{duplicate:true,…}` → agent warns,
-  re-calls with `confirm_duplicate=true` only after the user agrees.
+  re-calls with `confirm_duplicate=true` only after the user agrees. Chat also
+  accepts a CSV/XLSX/PDF upload (web only): `classify_and_start` decides receipt
+  vs statement; a statement starts an import and the agent reviews it via
+  `get_import_summary`, helps organize categories, `remap_import`s rows, then
+  `approve_import`s — TWO confirm gates (create/organize categories; record).
+  Rows stay server-side; the agent works by import_id. Agent replies render as
+  markdown (react-markdown + GFM).
 - **Import**: upload → agent structures rows → review grid (per-profile chooser,
   inline-edit category/sub/type/total/loan/notes/receipt_link, dup flag) →
   approve sends the edited rows. Grid fetches the target book's categories via
-  `/api/categories?profile_id=`; approval is per-row fault-tolerant.
+  `/api/categories?profile_id=`; approval is per-row fault-tolerant. The same
+  pipeline (parse → dedup → `approve_import`) backs the in-chat import above.
 - **WhatsApp**: neonize MessageEv → `should_process` gate (self-chat =
   chat==sender, covers hidden `@lid` JIDs; allowlist for others; outbound
   ids tracked → no loops) → same handler/agent as web.
@@ -149,6 +162,10 @@ web/src/
   (`qr_expired`) — use the Refresh button / `POST .../refresh`.
 - Self-chat JIDs arrive as `NUMBER@lid`, not `NUMBER@s.whatsapp.net` —
   that's why self-chat detection is `chat == sender`, not `chat == own`.
+- Chat statement import is WEB ONLY. WhatsApp `documentMessage` handling only
+  downloads pdf/image mimes (CSV/XLSX dropped) and routes any doc as a receipt;
+  statement parity needs the `MessageHandler` contract to carry a generic file
+  (filename+bytes+mime) — deferred. See `docs/design/2026-06-15-chat-statement-import.md`.
 - Claude Max OAuth tokens only work when the FIRST system block is the
   Claude Code identity string (see provider + `vision._claude_extract`).
 - `db.get_db()` commits on clean exit, rolls back on exception; WAL set once

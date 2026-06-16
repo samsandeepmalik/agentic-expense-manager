@@ -137,6 +137,9 @@ The tool set:
 | `manage_categories` / `manage_budgets` | set categories / per-category budgets |
 | `manage_recurring` | list / create / update (edit + pause/resume via `active`) / delete |
 | `list_profiles` / `set_active_profile` | available on every channel, incl. WhatsApp |
+| `get_import_summary` | summarise a parsed statement import by id — counts, duplicates, category buckets, unresolved rows, a sample (read-only) |
+| `remap_import` | assign categories to statement rows by id (`{match: merchant/contains/index → category_id}`); re-checks duplicates |
+| `approve_import` | record a reviewed statement import (optionally only some row indexes); per-row fault-tolerant, idempotent via `external_ref` |
 | `render_ui` | **web only** — emits declarative chart/table/metric specs the frontend renders verbatim (GenUI) |
 
 **Per-call profile targeting.** Every data tool above (`record/update/delete/
@@ -154,6 +157,22 @@ profile and category unambiguously, the agent may proceed without a round-trip,
 but still reports what it recorded. If the tool comes back flagged as a possible
 duplicate, the agent relays the matched transaction and asks before re-recording
 (see Duplicate detection).
+
+**Chat statement import (web only).** When a CSV/XLSX/PDF is uploaded in web chat,
+`imports.classify_and_start` decides receipt vs statement (spreadsheets are always
+statements; a PDF is parsed and treated as a statement only if it yields ≥2 rows,
+else a receipt). A statement is parsed into a pending import (status `review`) and
+the agent is handed its `import_id`. The agent then: `get_import_summary` →
+proposes category/sub-category changes (and applies them with `manage_categories`
+only after the user agrees — **gate 1**) → `remap_import` to assign the unresolved
+rows → shows the final mapping and waits for the user (**gate 2**) → `approve_import`.
+The parsed rows live in the `imports` table the whole time — the agent works by
+`import_id` over summaries and a mapping, never the full row payload, so context
+stays bounded on large statements. The flow reuses the existing import pipeline
+(`parse_with_agent`, `dedup.flag_duplicates`, `approve_import`), so dedup, audit
+(`channel='chat'`), idempotency and per-row fault tolerance all apply unchanged.
+WhatsApp is out of scope (its document handling only carries pdf/image; see
+`docs/design/2026-06-15-chat-statement-import.md`).
 
 ## Duplicate detection
 
@@ -310,6 +329,7 @@ erDiagram
         text status "parsing|review|approved|failed"
         text rows "JSON"
         int profile_id FK
+        text channel "import|chat"
     }
     settings {
         text key PK
@@ -337,7 +357,8 @@ budgets (a child with its own budget is tracked on its own line, not double-coun
 
 Migrations are idempotent blocks in `db.init_db()` (added via `PRAGMA
 table_info` checks): `receipt_link`, `loan`, `parent_id` on categories,
-`profile_id` on `imports` (scopes statement imports per profile) and on
+`profile_id` on `imports` (scopes statement imports per profile), `channel` on
+`imports` (`'import'` default; `'chat'` marks chat-originated imports) and on
 `audit_log` (nullable — NULL = global event such as a sync run); legacy
 settings keys migrated then deleted. The profiles migration rebuilds
 `categories` and `tax_profiles` with `UNIQUE(name, profile_id[, parent_id])`

@@ -129,8 +129,8 @@ bypass it); leave it off for batch/automated paths (recurring, import).
 | `GET/POST/PATCH/DELETE /api/categories` | categories + budgets + taxable; PATCH re-parents (sub-categories). `GET ?profile_id=` lists a non-active book's categories (used by the import grid) |
 | `GET/POST /api/tax-profiles` | tax profiles (activate) |
 | `GET/POST/PATCH/DELETE /api/recurring` | recurring rules |
-| `POST /api/imports` (optional `profile_id`) · `GET /{id}` · `POST /{id}/approve` | statement imports; `approve` accepts the edited review-grid `rows` (category/sub, type, total, loan, notes, receipt_link, skip) |
-| `GET/POST/DELETE /api/chat/sessions` · `POST .../messages` (SSE) | chat sessions |
+| `POST /api/imports` (optional `profile_id`) · `GET /{id}` · `POST /{id}/approve` | statement imports; `approve` accepts the edited review-grid `rows` (category/sub, type, total, loan, notes, receipt_link, skip). Chat-originated imports carry `channel='chat'` |
+| `GET/POST/DELETE /api/chat/sessions` · `POST .../messages` (SSE) | chat sessions; `messages` accepts a generic `file` (image → receipt OCR; CSV/XLSX/PDF → statement import, driven by the agent via the `get_import_summary`/`remap_import`/`approve_import` tools) |
 | `GET/POST /api/settings/ocr` | OCR provider selection |
 | `GET /api/sync/status` · `POST /api/sync/now` | Google sync |
 | `GET/POST /api/profiles` · `POST /{id}/activate` · `DELETE /{id}` | profiles (separate books) |
