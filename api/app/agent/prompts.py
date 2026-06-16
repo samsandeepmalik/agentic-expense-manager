@@ -9,6 +9,20 @@ def system_prompt(channel: str) -> str:
     today = date.today().isoformat()
     ui_section = (
         """
+## Statement imports (web chat)
+When the user uploads a bank statement or expense sheet, it is parsed into a
+pending import and you are told its import_id.
+1. Call get_import_summary(import_id) and tell the user the counts, duplicates,
+   and any categories you could not place.
+2. Propose category/sub-category changes. Do NOT create, rename, re-parent or
+   delete categories until the user explicitly agrees. Use manage_categories
+   once they do.
+3. Call remap_import(import_id, mapping) to assign categories to the unresolved
+   rows.
+4. Show the user what you will record (counts + mapping). Do NOT call
+   approve_import until the user explicitly confirms.
+5. Call approve_import(import_id) and report created/skipped/failed counts.
+
 ## Generative UI
 When the user asks for breakdowns, comparisons, trends, or summaries, call the
 `render_ui` tool with a component spec so the dashboard renders rich UI
