@@ -11,6 +11,7 @@ import sqlite3
 from ..errors import AppError
 from . import audit
 from . import categories as cat_svc
+from . import dedup
 from . import profiles as prof_svc
 from . import tax as tax_svc
 
@@ -68,8 +69,21 @@ def _resolve_category(conn, data: dict, pid: int) -> dict:
 
 
 def create_transaction(conn: sqlite3.Connection, data: dict, *,
-                       audit_row: bool = True) -> dict:
+                       audit_row: bool = True, check_duplicate: bool = False) -> dict:
     pid = data.get("profile_id") or prof_svc.active_id(conn)
+    if check_duplicate and not data.get("confirm_duplicate"):
+        dup = dedup.find_duplicate(conn, data, pid)
+        if dup is not None:
+            m = dup["txn"]
+            raise AppError(
+                "duplicate_suspected",
+                f"Looks like a duplicate of #{m['id']} "
+                f"({m['date']} {m['merchant']} ${m['total']}).",
+                409,
+                details={"reason": dup["reason"], "txn": {
+                    "id": m["id"], "date": m["date"], "merchant": m["merchant"],
+                    "total": m["total"]}},
+            )
     category = _resolve_category(conn, data, pid)
     if data["type"] not in ("income", "expense"):
         raise AppError("invalid_type", "type must be income or expense")

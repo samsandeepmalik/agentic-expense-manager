@@ -201,3 +201,38 @@ def test_reupload_receipt_wrong_profile_404(conn):
         assert False, "expected AppError"
     except AppError as exc:
         assert exc.status == 404
+
+
+import pytest
+
+from app.errors import AppError
+
+
+def _dupbase(**over):
+    return {"date": "2026-06-05", "type": "expense", "category": "Groceries",
+            "total": 50.0, "merchant": "Metro"} | over
+
+
+def test_check_duplicate_raises_on_match(conn):
+    svc.create_transaction(conn, _dupbase())
+    before = conn.execute("SELECT COUNT(*) c FROM transactions").fetchone()["c"]
+    with pytest.raises(AppError) as ei:
+        svc.create_transaction(conn, _dupbase(), check_duplicate=True)
+    assert ei.value.code == "duplicate_suspected"
+    assert ei.value.status == 409
+    assert ei.value.details["reason"] == "fields"
+    after = conn.execute("SELECT COUNT(*) c FROM transactions").fetchone()["c"]
+    assert after == before  # nothing inserted
+
+
+def test_confirm_duplicate_inserts_despite_match(conn):
+    svc.create_transaction(conn, _dupbase())
+    row = svc.create_transaction(conn, _dupbase(confirm_duplicate=True),
+                                 check_duplicate=True)
+    assert row["id"] > 0
+
+
+def test_check_duplicate_off_by_default_inserts(conn):
+    svc.create_transaction(conn, _dupbase())
+    row = svc.create_transaction(conn, _dupbase())  # no check → recurring/import path
+    assert row["id"] > 0
