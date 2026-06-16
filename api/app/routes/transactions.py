@@ -26,6 +26,7 @@ class TransactionIn(BaseModel):
     description: str = ""
     notes: str = ""
     loan: bool = False
+    confirm_duplicate: bool = False
 
 
 class TransactionPatch(BaseModel):
@@ -68,7 +69,7 @@ async def list_transactions(period: str | None = None,
 @router.post("/api/transactions")
 async def create_transaction(body: TransactionIn):
     with get_db() as conn:
-        return svc.create_transaction(conn, body.model_dump())
+        return svc.create_transaction(conn, body.model_dump(), check_duplicate=True)
 
 
 @router.post("/api/transactions/preview")
