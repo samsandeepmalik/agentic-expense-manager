@@ -108,3 +108,25 @@ def test_init_db_idempotent_on_legacy(tmp_path, monkeypatch):
     db.DB_PATH = db_file
     db.init_db()
     db.init_db()  # second run is a no-op, must not raise
+
+
+def test_init_db_adds_channel_to_legacy_imports(tmp_path, monkeypatch):
+    import sqlite3
+    db_file = tmp_path / "chan.db"
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    conn = sqlite3.connect(db_file)
+    conn.executescript(
+        "CREATE TABLE imports (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "filename TEXT NOT NULL, status TEXT DEFAULT 'parsing', "
+        "rows TEXT DEFAULT '[]', error TEXT, "
+        "profile_id INTEGER NOT NULL DEFAULT 1, created_at TEXT);")
+    conn.commit(); conn.close()
+
+    from app import db
+    db.DB_PATH = db_file
+    db.init_db()   # must NOT raise; runs idempotent migrations
+
+    conn = sqlite3.connect(db_file); conn.row_factory = sqlite3.Row
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(imports)")}
+    assert "channel" in cols
+    conn.close()

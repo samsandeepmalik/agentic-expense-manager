@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS imports (
   rows TEXT NOT NULL DEFAULT '[]',
   error TEXT,
   profile_id INTEGER NOT NULL DEFAULT 1 REFERENCES profiles(id),
+  channel TEXT NOT NULL DEFAULT 'import',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS settings (
@@ -188,6 +189,9 @@ def init_db() -> None:
             # the FK lives only in SCHEMA (fresh DBs); legacy rows default to 1.
             conn.execute("ALTER TABLE imports ADD COLUMN "
                          "profile_id INTEGER NOT NULL DEFAULT 1")
+        if "channel" not in import_cols:
+            conn.execute("ALTER TABLE imports ADD COLUMN "
+                         "channel TEXT NOT NULL DEFAULT 'import'")
         # Migration: profile_id on audit_log (nullable; NULL = global event e.g. sync)
         audit_cols = {r["name"] for r in conn.execute("PRAGMA table_info(audit_log)")}
         if "profile_id" not in audit_cols:
