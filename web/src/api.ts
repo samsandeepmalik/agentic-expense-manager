@@ -34,6 +34,10 @@ export interface ImportRecord { id: number; filename: string; status: string;
           receipt_link?: string | null; }[]; }
 export interface Profile { id: number; name: string;
   kind: "personal" | "incorporation" | "other"; active: boolean; }
+export interface DuplicateMatch {
+  reason: "receipt" | "fields";
+  txn: { id: number; date: string; merchant: string; total: number };
+}
 export interface UiComponentSpec { type: string; title?: string; label?: string;
   value?: number | string; unit?: string; data?: Record<string, unknown>[];
   xKey?: string; series?: string[]; columns?: string[]; rows?: unknown[][]; }
@@ -44,10 +48,24 @@ export type ChatEvent =
   | { type: "ui"; spec: UiSpec }
   | { type: "done"; text: string; error: string | null };
 
+export class ApiError extends Error {
+  code: string;
+  details: unknown;
+  status: number;
+  constructor(status: number, code: string, message: string, details: unknown) {
+    super(message);
+    this.code = code;
+    this.details = details;
+    this.status = status;
+  }
+}
+
 async function handle<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(body?.error?.message ?? `Request failed (${response.status})`);
+    const err = body?.error;
+    throw new ApiError(response.status, err?.code ?? "error",
+      err?.message ?? `Request failed (${response.status})`, err?.details);
   }
   return response.json();
 }

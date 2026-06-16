@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { get, post, type Category } from "../api";
+import { get, post, ApiError, type Category, type DuplicateMatch } from "../api";
 import { CategoryPicker } from "./CategoryPicker";
 
 export function QuickAdd({ onClose }: { onClose: () => void }) {
@@ -11,6 +11,7 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
     type: "expense" as "income" | "expense", categoryId: null as number | null,
     total: "", merchant: "", description: "", loan: false, notes: "" });
   const [error, setError] = useState("");
+  const [dup, setDup] = useState<DuplicateMatch | null>(null);
 
   const selected = categories.data?.find((c) => c.id === form.categoryId);
   const totalNum = parseFloat(form.total);
@@ -29,16 +30,24 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
     .map(([name, value]) => ({ name, value }));
 
   const save = useMutation({
-    mutationFn: () => post("/api/transactions",
+    mutationFn: (confirm: boolean) => post("/api/transactions",
       { date: form.date, type: form.type, category_id: form.categoryId,
         total: totalNum, merchant: form.merchant, description: form.description,
-        loan: form.loan, notes: form.notes }),
+        loan: form.loan, notes: form.notes, confirm_duplicate: confirm }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       onClose();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => {
+      if (e instanceof ApiError && e.code === "duplicate_suspected") {
+        setDup(e.details as DuplicateMatch);
+        setError("");
+      } else {
+        setDup(null);
+        setError(e.message);
+      }
+    },
   });
 
   const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
@@ -85,9 +94,22 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
                    onChange={(e) => setForm((f) => ({ ...f, loan: e.target.checked }))} />
             Loan (money lent / borrowed)
           </label>
+          {dup && (
+            <div className="card" style={{ background: "#fff7ed", padding: 10 }}>
+              <p style={{ margin: "0 0 6px" }}>
+                Possible duplicate of {dup.txn.merchant} {dup.txn.date} (${dup.txn.total.toFixed(2)}).
+                {dup.reason === "receipt" ? " Same receipt link." : ""}
+              </p>
+              <div className="row" style={{ gap: 8 }}>
+                <button className="primary" disabled={save.isPending}
+                        onClick={() => save.mutate(true)}>Add anyway</button>
+                <button onClick={() => setDup(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
           <button className="primary"
                   disabled={!form.categoryId || !totalValid || save.isPending}
-                  onClick={() => save.mutate()}>
+                  onClick={() => { setDup(null); save.mutate(false); }}>
             {save.isPending ? "Saving…" : "Save"}</button>
         </div>
       </div>
