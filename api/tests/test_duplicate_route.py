@@ -25,3 +25,22 @@ def test_confirm_duplicate_post_inserts(db_path):
     r = client.post("/api/transactions", json=_payload(confirm_duplicate=True))
     assert r.status_code == 200
     assert r.json()["id"] > 0
+
+
+def test_receipt_link_persisted_and_dedups(db_path):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    link = "https://drive.google.com/file/d/RCPT123"
+    a = client.post("/api/transactions", json=_payload(
+        merchant="ShopA", receipt_link=link))
+    assert a.status_code == 200
+    assert a.json()["receipt_link"] == link  # route persists it now
+
+    # Different merchant/amount/date but SAME receipt link → receipt dedup fires.
+    r = client.post("/api/transactions", json={
+        "date": "2026-12-31", "type": "expense", "category": "Groceries",
+        "total": 999.0, "merchant": "ShopB", "receipt_link": link})
+    assert r.status_code == 409
+    assert r.json()["error"]["details"]["reason"] == "receipt"

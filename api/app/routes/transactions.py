@@ -26,6 +26,7 @@ class TransactionIn(BaseModel):
     description: str = ""
     notes: str = ""
     loan: bool = False
+    receipt_link: str | None = None
     confirm_duplicate: bool = False
 
 

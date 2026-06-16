@@ -9,7 +9,8 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
     queryFn: () => get<Category[]>("/api/categories") });
   const [form, setForm] = useState({ date: new Date().toISOString().slice(0, 10),
     type: "expense" as "income" | "expense", categoryId: null as number | null,
-    total: "", merchant: "", description: "", loan: false, notes: "" });
+    total: "", merchant: "", description: "", loan: false, notes: "",
+    receiptLink: "" });
   const [error, setError] = useState("");
   const [dup, setDup] = useState<DuplicateMatch | null>(null);
 
@@ -33,7 +34,9 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
     mutationFn: (confirm: boolean) => post("/api/transactions",
       { date: form.date, type: form.type, category_id: form.categoryId,
         total: totalNum, merchant: form.merchant, description: form.description,
-        loan: form.loan, notes: form.notes, confirm_duplicate: confirm }),
+        loan: form.loan, notes: form.notes,
+        receipt_link: form.receiptLink.trim() || null,
+        confirm_duplicate: confirm }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
@@ -89,6 +92,8 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
           <textarea placeholder="Notes (optional)" rows={2} value={form.notes}
                     style={{ resize: "vertical" }}
                     onChange={(e) => set("notes", e.target.value)} />
+          <input placeholder="Receipt link (Drive/doc URL, optional)" value={form.receiptLink}
+                 onChange={(e) => set("receiptLink", e.target.value)} />
           <label className="row">
             <input type="checkbox" checked={form.loan}
                    onChange={(e) => setForm((f) => ({ ...f, loan: e.target.checked }))} />
