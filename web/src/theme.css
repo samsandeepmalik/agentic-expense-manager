@@ -192,6 +192,29 @@ button.seg { border: var(--rule-w) solid var(--rule); }
 .chat-side-head { display: flex; justify-content: space-between; margin: 14px 2px 2px; }
 .bubble-meta { opacity: .55; margin-bottom: 4px; font-size: 9px; }
 .bubble.user .bubble-meta { opacity: .7; }
+
+/* Rendered markdown inside an agent bubble. The bubble itself is pre-wrap (for
+   plain/streaming text); block markdown manages its own spacing, so reset it. */
+.md { white-space: normal; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 6px 0; }
+.md h1, .md h2, .md h3 { margin: 12px 0 6px; line-height: 1.2; }
+.md h1 { font-size: 16px; } .md h2 { font-size: 14px; } .md h3 { font-size: 13px; }
+.md ul, .md ol { margin: 6px 0; padding-left: 20px; }
+.md li { margin: 2px 0; }
+.md code { background: var(--bg-alt, rgba(0,0,0,.06)); padding: 1px 4px; border-radius: 3px;
+  font-size: 12px; }
+.md pre { background: var(--bg-alt, rgba(0,0,0,.06)); padding: 8px 10px; border-radius: 4px;
+  overflow-x: auto; }
+.md pre code { background: none; padding: 0; }
+.md table { border-collapse: collapse; margin: 8px 0; font-size: 12px; width: 100%; }
+.md th, .md td { border: 1px solid var(--rule); padding: 4px 8px; text-align: left; }
+.md th { background: rgba(0,0,0,.04); font-weight: 700; }
+.md a { color: inherit; text-decoration: underline; }
+.md blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--rule);
+  opacity: .85; }
+.md hr { border: none; border-top: 1px solid var(--hairline); margin: 10px 0; }
 .chat-inputrow { gap: 8px; padding-top: 10px; margin-top: 6px; border-top: 1px solid var(--hairline); }
 .fab {
   position: fixed; right: 24px; bottom: 24px; width: 54px; height: 54px;

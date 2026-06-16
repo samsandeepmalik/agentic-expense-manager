@@ -5,6 +5,8 @@ import { get, streamChat, type ChatEvent, type UiSpec } from "../api";
 // GenUI pulls in recharts; load it only when the agent actually renders a spec,
 // keeping the chart library out of the initial bundle.
 const GenUI = lazy(() => import("./GenUI").then((m) => ({ default: m.GenUI })));
+// react-markdown is sizeable; load it lazily too — only when a bubble renders.
+const Markdown = lazy(() => import("./Markdown").then((m) => ({ default: m.Markdown })));
 
 interface Item { role: "user" | "assistant"; text: string;
   uiSpecs?: UiSpec[]; tools?: string[]; }
@@ -82,7 +84,11 @@ export function ChatThread({ sessionId, compact = false, readOnly = false }:
               {item.role === "user" ? "You" : "Agent"}
               {(item.tools ?? []).length > 0 && <> · ⚙ {(item.tools ?? []).join(" · ")}</>}
             </div>
-            {item.text || (busy && index === items.length - 1 ? "…" : "")}
+            {item.role === "assistant" && item.text
+              ? <Suspense fallback={<span>{item.text}</span>}>
+                  <Markdown>{item.text}</Markdown>
+                </Suspense>
+              : item.text || (busy && index === items.length - 1 ? "…" : "")}
             {(item.uiSpecs ?? []).length > 0 && (
               <Suspense fallback={<span className="muted">…</span>}>
                 {(item.uiSpecs ?? []).map((spec, i) => <GenUI key={i} spec={spec} />)}
@@ -93,12 +99,13 @@ export function ChatThread({ sessionId, compact = false, readOnly = false }:
         <p className="lbl muted" style={{ textAlign: "center", paddingTop: 8 }}>
           WhatsApp conversation — reply from your phone.</p>)}
       {!readOnly && <div className="row chat-inputrow">
-        <label style={{ cursor: "pointer", fontSize: 20 }}>📷
+        <label style={{ cursor: "pointer", fontSize: 20 }}
+               title="Attach a receipt, or a CSV/Excel/PDF statement">📎
           <input type="file" accept="image/*,application/pdf,.csv,.xlsx,.xls" hidden
                  onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
         {file && <span className="muted">{file.name}</span>}
         <input className="grow" value={input} disabled={busy}
-               placeholder="MESSAGE OR RECEIPT DETAILS…"
+               placeholder="MESSAGE, RECEIPT OR STATEMENT…"
                onChange={(e) => setInput(e.target.value)}
                onKeyDown={(e) => e.key === "Enter" && send()} />
         <button className="primary" disabled={busy || (!input.trim() && !file)}
