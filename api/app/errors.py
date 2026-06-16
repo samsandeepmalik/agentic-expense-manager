@@ -11,11 +11,13 @@ logger = logging.getLogger(__name__)
 
 
 class AppError(Exception):
-    def __init__(self, code: str, message: str, status: int = 400) -> None:
+    def __init__(self, code: str, message: str, status: int = 400,
+                 details: dict | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.status = status
+        self.details = details
 
 
 def register_error_handler(app: FastAPI) -> None:
@@ -24,10 +26,10 @@ def register_error_handler(app: FastAPI) -> None:
 
     @app.exception_handler(AppError)
     async def _app_error(request: Request, exc: AppError):
-        return JSONResponse(
-            status_code=exc.status,
-            content={"error": {"code": exc.code, "message": exc.message}},
-        )
+        payload = {"code": exc.code, "message": exc.message}
+        if exc.details is not None:
+            payload["details"] = exc.details
+        return JSONResponse(status_code=exc.status, content={"error": payload})
 
     @app.exception_handler(GoogleNotConnectedError)
     async def _google_not_connected(request: Request, exc: GoogleNotConnectedError):
