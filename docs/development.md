@@ -35,7 +35,7 @@ DB (schema + seeds recreate on boot).
 ## Test & build
 
 ```bash
-cd api && poetry run pytest -v        # backend suite (~200 tests, ~3s)
+cd api && poetry run pytest -v        # backend suite (~235 tests, ~3s)
 cd web && npm run build               # tsc --noEmit + vite build
 ```
 
@@ -113,20 +113,23 @@ dispatch in `extract_text`, radio entry in `web/src/pages/Settings.tsx`.
 
 **A transaction write path** — call through
 `services/transactions.create_transaction` and friends; audit row + sync
-dirty-flag fire automatically. Never INSERT into `transactions` directly.
+dirty-flag fire automatically. Never INSERT into `transactions` directly. For a
+human-facing path that should warn on duplicates, pass `check_duplicate=True` and
+handle the `duplicate_suspected` `AppError` (let `confirm_duplicate` in the data
+bypass it); leave it off for batch/automated paths (recurring, import).
 
 ## API surface
 
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/dashboard?period=` | metrics, trend, by-category, budgets, recent |
-| `GET/POST/PATCH/DELETE /api/transactions` (+`/bulk`, `/export.csv`) | transaction CRUD |
+| `GET/POST/PATCH/DELETE /api/transactions` (+`/bulk`, `/export.csv`) | transaction CRUD. `POST` warns on a likely duplicate → `409 duplicate_suspected` with the matched txn in `error.details`; resend with `confirm_duplicate: true` to save anyway. Accepts `receipt_link` |
 | `GET /api/receipts/{id}` | receipt image (original file) |
 | `GET /api/receipts/{id}/preview` | rendered PNG preview (first page for PDFs; original for non-PDFs) |
-| `GET/POST/PATCH/DELETE /api/categories` | categories + budgets + taxable; PATCH re-parents (sub-categories) |
+| `GET/POST/PATCH/DELETE /api/categories` | categories + budgets + taxable; PATCH re-parents (sub-categories). `GET ?profile_id=` lists a non-active book's categories (used by the import grid) |
 | `GET/POST /api/tax-profiles` | tax profiles (activate) |
 | `GET/POST/PATCH/DELETE /api/recurring` | recurring rules |
-| `POST /api/imports` · `GET /{id}` · `POST /{id}/approve` | statement imports |
+| `POST /api/imports` (optional `profile_id`) · `GET /{id}` · `POST /{id}/approve` | statement imports; `approve` accepts the edited review-grid `rows` (category/sub, type, total, loan, notes, receipt_link, skip) |
 | `GET/POST/DELETE /api/chat/sessions` · `POST .../messages` (SSE) | chat sessions |
 | `GET/POST /api/settings/ocr` | OCR provider selection |
 | `GET /api/sync/status` · `POST /api/sync/now` | Google sync |
@@ -143,7 +146,9 @@ dirty-flag fire automatically. Never INSERT into `transactions` directly.
 | `GET /api/audit` | activity feed (writes + sync outcomes) |
 | `GET /api/health` | liveness |
 
-Errors always follow `{"error": {"code", "message"}}`.
+Errors always follow `{"error": {"code", "message"}}`, with an optional
+`"details"` object when the error carries structured data (e.g.
+`duplicate_suspected` includes the matched transaction).
 
 Receipt PDF rendering uses `PyMuPDF` (`fitz`) — already in the Poetry
 lockfile. Drive receipt uploads derive MIME type via `mimetypes` (not

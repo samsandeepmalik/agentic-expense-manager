@@ -56,8 +56,9 @@ Rules that keep it clean:
 - Money math lives in **one** place: `services/transactions._compute` →
   `services/tax.back_calculate`. Create, update, and bulk recategorize all
   reuse it. `round(x, 2)` at service boundaries.
-- API errors are `AppError(code, message, status)` → rendered by
-  `errors.register_error_handler` as `{"error": {code, message}}`.
+- API errors are `AppError(code, message, status, details=None)` → rendered by
+  `errors.register_error_handler` as `{"error": {code, message}}`, plus a
+  `details` object when set (e.g. `duplicate_suspected` ships the matched txn).
 - Settings-table keys are constants in `settings_keys.py` — never inline
   strings.
 
@@ -129,21 +130,60 @@ The tool set:
 
 | Tool | Notes |
 |---|---|
-| `record_transaction` | total only (taxes derived server-side); also `notes`, `receipt_link`, optional `profile` |
+| `record_transaction` | total only (taxes derived server-side); also `notes`, `receipt_link`; on a likely duplicate returns `{duplicate: true, …}` instead of saving — re-call with `confirm_duplicate: true` to override |
 | `update_transaction` / `delete_transaction` | edit or remove by id |
 | `query_transactions` | date / type / category / text / loan filters |
 | `get_summary` | dashboard-style aggregates |
-| `manage_categories` / `manage_budgets` | optional `profile` so they act on the right book, not silently the active one |
+| `manage_categories` / `manage_budgets` | set categories / per-category budgets |
 | `manage_recurring` | list / create / update (edit + pause/resume via `active`) / delete |
 | `list_profiles` / `set_active_profile` | available on every channel, incl. WhatsApp |
 | `render_ui` | **web only** — emits declarative chart/table/metric specs the frontend renders verbatim (GenUI) |
+
+**Per-call profile targeting.** Every data tool above (`record/update/delete/
+query_transactions`, `get_summary`, `manage_categories/budgets/recurring`) accepts
+an optional `profile` name and operates on that book for that one call — so the
+agent can answer about, or write to, a non-active profile **without** calling
+`set_active_profile` (which would shift the active book the web UI and other
+channels share). It only switches the active profile when the user explicitly asks.
 
 **Confirm flow (web and WhatsApp).** Before calling `record_transaction` the
 agent confirms, in one message, the target profile (required when 2+ profiles
 exist), the category/sub-category, and the income/expense type. The tool runs
 only after the user confirms or corrects. If the original message already states
 profile and category unambiguously, the agent may proceed without a round-trip,
-but still reports what it recorded.
+but still reports what it recorded. If the tool comes back flagged as a possible
+duplicate, the agent relays the matched transaction and asks before re-recording
+(see Duplicate detection).
+
+## Duplicate detection
+
+One rule, defined once in `services/dedup.find_duplicate(conn, data, profile_id)`,
+flags a transaction as a likely duplicate of an existing one in the same profile
+when **either** trigger fires:
+
+- **receipt** — a non-empty `receipt_link` exactly matches an existing row (a
+  re-shared receipt is almost certainly the same expense);
+- **fields** — same `total` + `merchant` (case-insensitive) + `date` (exact day).
+
+Merchant in the key avoids false positives on legitimate repeats (two $5 coffees at
+different shops); exact-day avoids fuzzy noise. The function is a pure read.
+
+It is a **soft warning, never a hard block** — duplicates are sometimes real, so the
+user always decides. The gate lives in the shared chokepoint
+`transactions.create_transaction(conn, data, *, check_duplicate=False)`: when a
+caller opts in and `data["confirm_duplicate"]` is falsy, a hit raises
+`AppError("duplicate_suspected", …, 409, details={reason, txn})` and nothing is
+written. Each surface handles it:
+
+| Surface | Opts in | On a hit | Override |
+|---|---|---|---|
+| Web QuickAdd (`POST /api/transactions`) | yes | 409 + match → "Possible duplicate… Add anyway?" | re-POST with `confirm_duplicate: true` |
+| Agent `record_transaction` | yes | tool returns `{duplicate: true, match, reason}` → agent warns | re-call with `confirm_duplicate: true` |
+| Statement import grid | n/a | row flagged via `dedup.flag_duplicates` (same rule), pre-skipped | per-row skip toggle |
+| Recurring rules | **no** | never flagged (monthly rent is not a duplicate) | — |
+
+`flag_duplicates` (import grid) is a thin wrapper over `find_duplicate`, so the
+review grid and the live add paths share exactly one definition.
 
 ## Sync (one-way, event-driven)
 

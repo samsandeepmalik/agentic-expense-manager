@@ -30,14 +30,15 @@ See [docs/architecture.md](docs/architecture.md) for diagrams and the reasoning 
 ## Features
 
 - **Profiles** — separate books per context (Personal, Incorporation, etc.); every part of the app (transactions, recurring rules, categories, tax profile, dashboard, imports, audit feed, Google sheet, and Drive folder) is strictly scoped to the active profile.
-- **Dashboard** — income/expenses/net, 6-month trend, category pie, per-category budgets with 90% alerts, quick-add modal with live tax preview.
+- **Dashboard** — income/expenses/net, 6-month trend, category pie, per-category budgets with 90% alerts, quick-add modal with live tax preview, optional receipt link, and a duplicate-add warning.
 - **Tax back-calculation** — enter the total paid; GST/QST/HST are derived server-side from the category's taxable flag and the active tax profile (Quebec / Ontario / Alberta presets).
 - **Chat agent** — natural-language entry ("spent $42 at Metro on groceries") or a receipt photo/PDF; streaming replies, inline generative charts/tables. Before recording, the agent confirms the target profile (when 2+ exist) and the category/sub-category.
 - **WhatsApp** — pair your account (QR), then talk to the agent in your *"Message yourself"* chat; sender allowlist; weekly summary; strangers ignored.
 - **Sub-categories** — one level of nesting under any category (e.g. Groceries → Produce); unique per (name, profile, parent); exposed in REST, the agent, and Settings.
 - **Receipt OCR** — accepts images **and PDF files** (PyMuPDF renders each page to PNG, then OCRs); selectable provider: NVIDIA PaddleOCR, Claude vision, or OpenAI vision (Settings → Receipt OCR). Works from web chat and WhatsApp document messages.
 - **Transactions** — filters, inline edit (taxes recomputed), bulk delete/recategorize, CSV export, receipt lightbox, loan flag, per-row notes; a dependent Category → Sub-category picker; expand any row to see the full breakdown (income/expense, base × category% = counted, every tax component); each tax component (GST, QST, …) shown on its own line.
-- **Statement imports** — upload CSV/XLSX/PDF bank statements; the agent structures rows, duplicates pre-skipped, you review and approve.
+- **Statement imports** — upload CSV/XLSX/PDF bank statements; the agent structures rows, then a review grid lets you pick the target profile, edit each row inline (category/sub-category, type, total, loan, notes, receipt link), and approve; likely duplicates are flagged and pre-skipped.
+- **Duplicate warning** — adding the same transaction twice (same total + merchant + date, or the same receipt link) is flagged before it's saved, in the web quick-add and the chat agent alike. It's a warning, never a block — confirm "add anyway" and it records.
 - **Recurring rules** — rent/salary templates auto-record on schedule; create, edit, and pause/resume them in Settings (or via the agent).
 - **Tax profiles** — create/edit tax profiles and their components (rates) in Settings, or activate a preset (Quebec / Ontario / Alberta).
 - **Audit trail** — every write and sync outcome logged (Settings → Activity).
@@ -90,7 +91,7 @@ The agent requires one of:
 
 Set just one of the two. Everything else (OCR provider, Google sync, WhatsApp) is optional and configurable in-app.
 
-`CLAUDE_MODEL` is optional (default: `claude-sonnet-4-20250514`).
+`CLAUDE_MODEL` is optional (default: `claude-sonnet-4-6`).
 
 ### WhatsApp
 

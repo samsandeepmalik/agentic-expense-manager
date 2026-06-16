@@ -40,7 +40,8 @@ api/app/
                            settings KV (get_setting/set_setting)
   settings_keys.py         ALL settings-table key constants — never inline strings
   config.py                env vars (.env at repo root)
-  errors.py                AppError(code, message, status) + handler → {"error":{...}}
+  errors.py                AppError(code, message, status, details?) + handler →
+                           {"error":{code,message,details?}} (details = optional dict)
   routes/                  thin HTTP: pydantic in, `with get_db()`, service call
     transactions dashboard categories recurring imports chat sync settings
     whatsapp google_auth audit profiles
@@ -48,8 +49,13 @@ api/app/
     transactions.py        CRUD/bulk/CSV/dashboard_data; _compute = ONLY money math;
                            every write → audit row + sync dirty flag. Categories
                            resolved by id (_resolve_category, accepts category_id);
-                           dashboard rolls sub-cats up to parent (pie + budgets)
-    tax.py periods.py categories.py dedup.py recurring.py chat_store.py
+                           dashboard rolls sub-cats up to parent (pie + budgets).
+                           create_transaction(check_duplicate=) opt-in dup gate →
+                           raises duplicate_suspected(409) unless confirm_duplicate
+    dedup.py               THE one duplicate rule (find_duplicate): exact
+                           receipt_link match OR total+merchant+date+profile.
+                           Used by import grid (flag_duplicates) + the create gate
+    tax.py periods.py categories.py recurring.py chat_store.py
                            categories: one-level nesting via parent_id (0=top);
                            UNIQUE(name, profile_id, parent_id)
     profiles.py            CRUD + active_id(conn); all services scope to active
@@ -70,9 +76,11 @@ api/app/
     runtime.py             Session per chat id; history replay from chat_store; SSE events
     anthropic_provider.py  Claude Max OAuth provider — PROTECTED
     tools.py               record/update/delete_transaction, query, get_summary,
-                           manage_* (categories/budgets take optional profile;
-                           recurring has update), list_profiles, set_active_profile
-                           (all channels), render_ui (ui only)
+                           manage_* (recurring has update), list_profiles,
+                           set_active_profile (all channels), render_ui (ui only).
+                           EVERY data tool takes optional `profile` name → act on
+                           another book WITHOUT switching active. record_transaction
+                           takes `confirm_duplicate` (override the dup warning)
     prompts.py             system prompt (channel-aware: ui vs whatsapp)
   channels/
     base.py                BaseChannelRegistry contract (main.py codes against this)
@@ -94,6 +102,11 @@ web/src/
   tax_profile; writes audit row; fires `sync.request_sync()`. NEVER insert
   into transactions directly; never compute taxes elsewhere. Txns also carry
   `loan` (bool) + `receipt_link` (external Drive/doc URL).
+- **Duplicate warning**: human-facing add paths (web QuickAdd, agent record)
+  pass `check_duplicate=True`; on a `dedup.find_duplicate` hit the gate raises
+  `duplicate_suspected`(409) carrying the matched txn — the surface warns and
+  re-submits with `confirm_duplicate` to override. Recurring + import do NOT
+  opt in (rent monthly isn't a dup; import has its own grid flagging).
 - **Profiles**: full data partition — each profile owns its transactions,
   categories, tax_profile and its OWN Google sheet + Drive folder. Active
   profile is a settings key; services scope every query via
@@ -102,7 +115,14 @@ web/src/
 - **Chat**: routes/chat SSE → runtime.Session → tools → services. UI specs
   from `render_ui` rendered verbatim by GenUI.tsx. Before recording a txn
   the agent confirms the target profile (when 2+ profiles exist) and the
-  category/sub-category; new tools: `list_profiles`, `set_active_profile`.
+  category/sub-category; tools: `list_profiles`, `set_active_profile`. To read/
+  write a NON-active book the agent passes `profile` per call (never switches
+  active). On a duplicate the tool returns `{duplicate:true,…}` → agent warns,
+  re-calls with `confirm_duplicate=true` only after the user agrees.
+- **Import**: upload → agent structures rows → review grid (per-profile chooser,
+  inline-edit category/sub/type/total/loan/notes/receipt_link, dup flag) →
+  approve sends the edited rows. Grid fetches the target book's categories via
+  `/api/categories?profile_id=`; approval is per-row fault-tolerant.
 - **WhatsApp**: neonize MessageEv → `should_process` gate (self-chat =
   chat==sender, covers hidden `@lid` JIDs; allowlist for others; outbound
   ids tracked → no loops) → same handler/agent as web.
@@ -157,3 +177,7 @@ web/src/
   the STALE image. Symptom: behaviour unchanged after a "restart".
 - Sheet TOTALS row is FROZEN at row 2 (header row 1, data row 3+); Sheets can only
   freeze from the top, so totals live at the top, not the bottom.
+- Duplicate rule lives ONLY in `dedup.find_duplicate` — change it there, nowhere
+  else. It is a soft WARN, never a hard block (legit dups exist, e.g. two coffees);
+  `confirm_duplicate` bypasses it. Receipt match needs a stored `receipt_link`, so
+  it only fires where one is set (agent, QuickAdd receipt field, import).
