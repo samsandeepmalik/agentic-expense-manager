@@ -11,7 +11,9 @@ dashboard, a WhatsApp channel, and optional one-way Google Sheets/Drive sync.
 SQLite on your machine is the single source of truth — everything works with
 just a Claude token; OCR and Google sync are opt-in add-ons.
 
-![Dashboard](docs/images/dashboard.png)
+![Quick-add demo — enter a total, taxes are derived server-side, the dashboard updates](docs/images/demo.gif)
+
+*Enter what you paid; GST/QST are back-calculated server-side and the dashboard updates instantly.*
 
 ## Engineering highlights
 
@@ -42,6 +44,8 @@ See [docs/architecture.md](docs/architecture.md) for diagrams and the reasoning 
 - **Google sync** — optional one-way mirror (app → Sheet + Drive), debounced, idempotent, never read back; per-profile (each gets its own sheet + folder). Choose which columns appear and in what order (Settings), with a live preview; a frozen, always-visible TOTALS row; receipts shown as a readable name plus a Drive link; a "Counted %" column.
 
 ## Screenshots
+
+[![Dashboard](docs/images/dashboard.png)](docs/images/dashboard.png)
 
 | Transactions | Quick add (live tax preview) |
 |---|---|
