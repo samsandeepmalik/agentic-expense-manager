@@ -14,6 +14,7 @@ from typing import Any
 from pi_agent.agent_core import AgentTool, AgentToolResult, TextContent
 
 from ..db import get_db
+from ..errors import AppError
 from ..services import categories as cat_svc
 from ..services import profiles as prof_svc
 from ..services import recurring as rec_svc
@@ -62,6 +63,9 @@ RECORD_TRANSACTION_SCHEMA = {
                          "description": "External URL to a Drive doc or receipt (optional)"},
         "profile": {"type": "string",
                     "description": "Profile name to record into; defaults to the active profile"},
+        "confirm_duplicate": {"type": "boolean",
+            "description": "Set true ONLY after the user confirms adding a "
+                           "transaction you warned was a possible duplicate."},
     },
     "required": ["date", "type", "category", "total"],
 }
@@ -227,6 +231,7 @@ def build_tools(channel: str, ui_sink: UiSink, source: str) -> list[AgentTool]:
                         "loan": bool(params.get("loan", False)),
                         "notes": params.get("notes", ""),
                         "receipt_link": params.get("receipt_link"),
+                        "confirm_duplicate": bool(params.get("confirm_duplicate", False)),
                     }
                     wanted = (params.get("profile") or "").strip().lower()
                     if wanted:
@@ -235,8 +240,14 @@ def build_tools(channel: str, ui_sink: UiSink, source: str) -> list[AgentTool]:
                         if match is None:
                             raise ValueError(f"Unknown profile: {params['profile']}")
                         data["profile_id"] = match["id"]
-                    return txn_svc.create_transaction(conn, data)
+                    return txn_svc.create_transaction(conn, data, check_duplicate=True)
             return _text_result(await asyncio.to_thread(work))
+        except AppError as exc:
+            if exc.code == "duplicate_suspected":
+                return _text_result({"duplicate": True, "message": exc.message,
+                                     "match": exc.details["txn"],
+                                     "reason": exc.details["reason"]})
+            return _text_result({"error": f"That didn't work: {exc.message}"})
         except Exception as exc:  # noqa: BLE001 — friendly degradation
             return _text_result({"error": f"That didn't work: {exc}"})
 
