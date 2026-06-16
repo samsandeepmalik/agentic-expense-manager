@@ -21,7 +21,7 @@ class Config:
 
     claude_oauth_token: str = os.getenv("CLAUDE_CODE_OAUTH_TOKEN", "")
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
-    claude_model: str = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
+    claude_model: str = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
     anthropic_base_url: str = os.getenv(
         "ANTHROPIC_BASE_URL", "https://api.anthropic.com"
     )
