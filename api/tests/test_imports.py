@@ -61,3 +61,25 @@ def test_remap_import_applies_mapping_redups_idempotent(conn):
         {"match": {"contains": "UBER"}, "category_id": rideshare["id"]},
     ])
     assert again["total_rows"] == 2
+
+
+import asyncio
+
+
+def test_classify_and_start_csv_is_statement(conn, monkeypatch):
+    async def fake_parse(text, profile_id):
+        return [{"date": "2026-05-01", "type": "expense", "category": "Groceries",
+                 "merchant": "Metro", "total": 5.0}]
+    monkeypatch.setattr(svc, "parse_with_agent", fake_parse)
+    result = asyncio.run(svc.classify_and_start("bank.csv", b"a,b\n1,2\n", 1))
+    assert result["kind"] == "statement"
+    assert result["import_id"] is not None
+
+
+def test_classify_and_start_scanned_pdf_is_receipt(conn, monkeypatch):
+    from app.errors import AppError
+    def boom(filename, data):
+        raise AppError("pdf_unreadable", "scanned", 422)
+    monkeypatch.setattr(svc, "extract_text", boom)
+    result = asyncio.run(svc.classify_and_start("scan.pdf", b"%PDF", 1))
+    assert result["kind"] == "receipt"

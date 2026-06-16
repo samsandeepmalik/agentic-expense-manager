@@ -130,6 +130,48 @@ async def start_import(filename: str, data: bytes,
     return get_import(import_id)
 
 
+def _is_spreadsheet(filename: str) -> bool:
+    return filename.lower().endswith((".csv", ".xlsx", ".xls"))
+
+
+async def classify_and_start(filename: str, data: bytes,
+                             profile_id: int | None = None) -> dict:
+    """Decide receipt vs statement for a chat upload.
+
+    CSV/XLSX/XLS → always statement (delegate to start_import channel="chat").
+    PDF → extract_text raises AppError (scanned/unreadable) → receipt;
+          else parse_with_agent: >=2 rows → statement, else → receipt.
+    Anything else (images, etc.) → receipt.
+
+    Return shapes:
+      {"kind": "statement", "import_id": int}
+      {"kind": "receipt",   "import_id": None}
+      {"kind": "failed",    "import_id": int, "error": str}
+    """
+    with get_db() as conn:
+        pid = profile_id if profile_id is not None else prof_svc.active_id(conn)
+
+    if _is_spreadsheet(filename):
+        record = await start_import(filename, data, pid, channel="chat")
+        kind = "failed" if record["status"] == "failed" else "statement"
+        return {"kind": kind, "import_id": record["id"],
+                "error": record.get("error")}
+
+    if filename.lower().endswith(".pdf"):
+        try:
+            text = extract_text(filename, data)
+        except AppError:
+            return {"kind": "receipt", "import_id": None}
+        rows = await parse_with_agent(text, pid)
+        if len(rows) >= 2:
+            with get_db() as conn:
+                import_id = _persist_import(conn, filename, rows, pid, "chat")
+            return {"kind": "statement", "import_id": import_id}
+        return {"kind": "receipt", "import_id": None}
+
+    return {"kind": "receipt", "import_id": None}
+
+
 def get_import(import_id: int) -> dict:
     # Addressed by id; the import carries its own profile_id (chosen at upload).
     # Don't scope to the active profile — a user may import into a non-active
