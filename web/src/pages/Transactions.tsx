@@ -94,6 +94,7 @@ export default function Transactions({ period }: { period: string }) {
       {selected.size > 0 && (
         <div className="row invert" style={{ marginBottom: 10, padding: "8px 12px", flexWrap: "wrap", gap: 6 }}>
           <b className="lbl">{selected.size} selected</b>
+          <span className="lbl" style={{ opacity: .7 }}>move to</span>
           <select value={bulkCatType}
                   style={{ width: 100 }}
                   onChange={(e) => { setBulkCatType(e.target.value as "expense" | "income"); setBulkCatId(null); }}>
@@ -105,6 +106,7 @@ export default function Transactions({ period }: { period: string }) {
             type={bulkCatType}
             valueId={bulkCatId}
             onChange={setBulkCatId}
+            alwaysShowSub
           />
           <button className="ghost"
                   disabled={bulkCatId === null || bulk.isPending}
@@ -114,6 +116,7 @@ export default function Transactions({ period }: { period: string }) {
                   }}>
             Apply</button>
           <button className="ghost danger"
+                  style={{ marginLeft: "auto" }}
                   onClick={() => {
                     if (window.confirm(`Delete ${selected.size} transaction(s)? This cannot be undone.`))
                       bulk.mutate({ ids: [...selected], action: "delete" });

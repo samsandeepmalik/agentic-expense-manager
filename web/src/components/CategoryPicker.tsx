@@ -6,9 +6,14 @@ interface Props {
   type: "income" | "expense";
   valueId: number | null;
   onChange: (categoryId: number | null) => void;
+  /** Always render the sub-category slot, even before a parent is picked or
+   *  when the parent has no children — so the sub-category step is discoverable
+   *  (e.g. in the bulk recategorize bar). Disabled until a parent with
+   *  children is selected. */
+  alwaysShowSub?: boolean;
 }
 
-export function CategoryPicker({ categories, type, valueId, onChange }: Props) {
+export function CategoryPicker({ categories, type, valueId, onChange, alwaysShowSub = false }: Props) {
   const tops = useMemo(
     () => categories.filter((c) => c.parent_id === 0 && c.type === type),
     [categories, type]
@@ -67,9 +72,15 @@ export function CategoryPicker({ categories, type, valueId, onChange }: Props) {
           <option key={c.id} value={c.id}>{c.name}</option>
         ))}
       </select>
-      {hasChildren && (
-        <select value={subId} onChange={handleSub} style={{ flex: 1 }}>
-          <option value="">— none —</option>
+      {(hasChildren || alwaysShowSub) && (
+        <select value={subId} onChange={handleSub} disabled={!hasChildren}
+                title={!hasChildren
+                  ? (topId === "" ? "Pick a category first" : "No sub-categories")
+                  : undefined}
+                style={{ flex: 1 }}>
+          <option value="">
+            {topId === "" ? "Sub-category…" : hasChildren ? "— none —" : "no sub-categories"}
+          </option>
           {children.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}

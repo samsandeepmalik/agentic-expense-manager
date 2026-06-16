@@ -69,6 +69,13 @@ button.ghost {
 button.ghost:hover { border-color: var(--rule); }
 button.ghost:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 button.ghost.danger { color: var(--accent); }
+button.ghost:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Ghost buttons sitting on a dark .invert bar need light ink, else they
+   vanish (dark-on-dark). Keep .danger on its accent so it stays readable. */
+.invert button.ghost { color: var(--bg); border-color: rgba(255, 255, 255, .4); }
+.invert button.ghost:hover:not(:disabled) { border-color: var(--bg); }
+.invert button.ghost.danger { color: var(--accent); }
 
 /* ---- forms ---- */
 input, select {

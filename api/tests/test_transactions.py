@@ -123,6 +123,25 @@ def test_bulk_recategorize_still_works(conn):
     assert svc.get_transaction(conn, t1["id"])["category"] == "Dining"
 
 
+def test_bulk_recategorize_to_subcategory_by_id(conn):
+    # The Transactions bulk bar sends a sub-category's category_id. Moving a txn
+    # there must land it on the CHILD (not the parent) and recompute counted
+    # using the child's percent.
+    parent, child = _parent_child(conn, parent="Travel", child="Flights",
+                                  budget=None)
+    cat_svc.upsert_category(conn, child["name"], "expense", 25, True, None,
+                            parent_id=parent["id"])  # set child to 25%
+    refreshed = cat_svc.find_category_by_name(conn, "Flights",
+                                              parent_id=parent["id"])
+    t1 = _create(conn, category="Groceries", total=100.0)
+    n = svc.bulk_action(conn, [t1["id"]], "recategorize",
+                        category_id=refreshed["id"])
+    assert n == 1
+    moved = svc.get_transaction(conn, t1["id"])
+    assert moved["category_id"] == refreshed["id"]   # the child, not the parent
+    assert moved["counted"] == 25.0                  # child's 25% applied
+
+
 def test_bulk_delete(conn):
     ids = [_create(conn)["id"] for _ in range(3)]
     svc.bulk_action(conn, ids[:2], "delete")
