@@ -16,6 +16,7 @@ from pi_agent.agent_core import AgentTool, AgentToolResult, TextContent
 from ..db import get_db
 from ..errors import AppError
 from ..services import categories as cat_svc
+from ..services import imports as imp_svc
 from ..services import profiles as prof_svc
 from ..services import recurring as rec_svc
 from ..services import transactions as txn_svc
@@ -215,6 +216,48 @@ RENDER_UI_SCHEMA = {
 }
 
 
+GET_IMPORT_SUMMARY_SCHEMA = {
+    "type": "object",
+    "properties": {"import_id": {"type": "integer"}},
+    "required": ["import_id"],
+}
+
+REMAP_IMPORT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "import_id": {"type": "integer"},
+        "mapping": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "match": {
+                        "type": "object",
+                        "properties": {
+                            "merchant": {"type": "string"},
+                            "contains": {"type": "string"},
+                            "index": {"type": "integer"},
+                        },
+                    },
+                    "category_id": {"type": "integer"},
+                },
+                "required": ["match", "category_id"],
+            },
+        },
+    },
+    "required": ["import_id", "mapping"],
+}
+
+APPROVE_IMPORT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "import_id": {"type": "integer"},
+        "indexes": {"type": "array", "items": {"type": "integer"}},
+    },
+    "required": ["import_id"],
+}
+
+
 def build_tools(channel: str, ui_sink: UiSink, source: str) -> list[AgentTool]:
     async def record_transaction(tool_call_id, params, abort_event=None, on_update=None):
         try:
@@ -398,6 +441,34 @@ def build_tools(channel: str, ui_sink: UiSink, source: str) -> list[AgentTool]:
         except Exception as exc:  # noqa: BLE001
             return _text_result({"error": f"That didn't work: {exc}"})
 
+    async def get_import_summary(tool_call_id, params, abort_event=None, on_update=None):
+        try:
+            def work():
+                with get_db() as conn:
+                    return imp_svc.import_summary(conn, int(params["import_id"]))
+            return _text_result(await asyncio.to_thread(work))
+        except Exception as exc:  # noqa: BLE001
+            return _text_result({"error": f"That didn't work: {exc}"})
+
+    async def remap_import(tool_call_id, params, abort_event=None, on_update=None):
+        try:
+            def work():
+                with get_db() as conn:
+                    return imp_svc.remap_import(conn, int(params["import_id"]),
+                                                params.get("mapping", []))
+            return _text_result(await asyncio.to_thread(work))
+        except Exception as exc:  # noqa: BLE001
+            return _text_result({"error": f"That didn't work: {exc}"})
+
+    async def approve_import(tool_call_id, params, abort_event=None, on_update=None):
+        try:
+            def work():
+                return imp_svc.approve_import(int(params["import_id"]),
+                                              params.get("indexes"))
+            return _text_result(await asyncio.to_thread(work))
+        except Exception as exc:  # noqa: BLE001
+            return _text_result({"error": f"That didn't work: {exc}"})
+
     async def render_ui(tool_call_id, params, abort_event=None, on_update=None):
         try:
             spec = {"title": params.get("title", ""), "components": params["components"]}
@@ -501,6 +572,31 @@ def build_tools(channel: str, ui_sink: UiSink, source: str) -> list[AgentTool]:
                          "the active profile everywhere (web + WhatsApp)."),
             parameters=SET_ACTIVE_PROFILE_SCHEMA,
             execute=set_active_profile,
+        ),
+        AgentTool(
+            name="get_import_summary",
+            label="Import summary",
+            description=("Summarise a parsed statement import by id: row count, "
+                         "duplicates, category buckets, unresolved rows, a sample."),
+            parameters=GET_IMPORT_SUMMARY_SCHEMA,
+            execute=get_import_summary,
+        ),
+        AgentTool(
+            name="remap_import",
+            label="Remap import",
+            description=("Assign categories to statement rows by id. mapping is a "
+                         "list of {match:{merchant|contains|index}, category_id}. "
+                         "Re-checks duplicates. Call after organising categories."),
+            parameters=REMAP_IMPORT_SCHEMA,
+            execute=remap_import,
+        ),
+        AgentTool(
+            name="approve_import",
+            label="Approve import",
+            description=("Record a reviewed statement import (optionally only the "
+                         "given row indexes). ALWAYS confirm with the user first."),
+            parameters=APPROVE_IMPORT_SCHEMA,
+            execute=approve_import,
         ),
     ]
 
