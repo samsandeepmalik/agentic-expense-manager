@@ -20,7 +20,7 @@ export function ChatThread({ sessionId, compact = false, readOnly = false }:
   const queryClient = useQueryClient();
   const [items, setItems] = useState<Item[]>([]);
   const [input, setInput] = useState("");
-  const [image, setImage] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -36,10 +36,10 @@ export function ChatThread({ sessionId, compact = false, readOnly = false }:
   useEffect(() => { scroller.current?.scrollTo(0, 1e9); }, [items]);
 
   async function send() {
-    if (busy || (!input.trim() && !image)) return;
-    const message = input.trim(); const attachment = image;
-    setInput(""); setImage(null); setBusy(true);
-    setItems((prev) => [...prev, { role: "user", text: message || "(receipt image)" },
+    if (busy || (!input.trim() && !file)) return;
+    const message = input.trim(); const attachment = file;
+    setInput(""); setFile(null); setBusy(true);
+    setItems((prev) => [...prev, { role: "user", text: message || (attachment ? `(file: ${attachment.name})` : "") },
                         { role: "assistant", text: "", uiSpecs: [], tools: [] }]);
     const applyLast = (fn: (i: Item) => Item) => setItems((prev) => {
       const next = [...prev]; next[next.length - 1] = fn(next[next.length - 1]); return next; });
@@ -94,14 +94,14 @@ export function ChatThread({ sessionId, compact = false, readOnly = false }:
           WhatsApp conversation — reply from your phone.</p>)}
       {!readOnly && <div className="row chat-inputrow">
         <label style={{ cursor: "pointer", fontSize: 20 }}>📷
-          <input type="file" accept="image/*,application/pdf" hidden
-                 onChange={(e) => setImage(e.target.files?.[0] ?? null)} /></label>
-        {image && <span className="muted">{image.name}</span>}
+          <input type="file" accept="image/*,application/pdf,.csv,.xlsx,.xls" hidden
+                 onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
+        {file && <span className="muted">{file.name}</span>}
         <input className="grow" value={input} disabled={busy}
                placeholder="MESSAGE OR RECEIPT DETAILS…"
                onChange={(e) => setInput(e.target.value)}
                onKeyDown={(e) => e.key === "Enter" && send()} />
-        <button className="primary" disabled={busy || (!input.trim() && !image)}
+        <button className="primary" disabled={busy || (!input.trim() && !file)}
                 onClick={send}>{busy ? "…" : "Send"}</button>
       </div>}
     </div>
