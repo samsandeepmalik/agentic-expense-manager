@@ -35,3 +35,29 @@ def test_import_summary_buckets_and_unresolved(conn):
     assert labels["Groceries"]["resolved_category_id"] is not None
     assert any(u["merchant"] == "UBER *EATS" for u in summary["unresolved"])
     assert len(summary["sample"]) <= 10
+
+
+from app.services import categories as cat_svc
+
+
+def test_remap_import_applies_mapping_redups_idempotent(conn):
+    rideshare = cat_svc.upsert_category(conn, "Rideshare", "expense", 100, True, None)
+    rows = [
+        {"date": "2026-05-02", "type": "expense", "category": "Nonsense",
+         "merchant": "UBER *EATS 800", "total": 24.1},
+        {"date": "2026-05-03", "type": "expense", "category": "Nonsense",
+         "merchant": "LYFT RIDE", "total": 12.0},
+    ]
+    import_id = svc._persist_import(conn, "s.csv", rows, 1, "chat")
+    conn.commit()
+    result = svc.remap_import(conn, import_id, [
+        {"match": {"contains": "UBER"}, "category_id": rideshare["id"]},
+        {"match": {"index": 1}, "category_id": rideshare["id"]},
+    ])
+    assert result["unresolved"] == []
+    stored = svc.get_import(import_id)["rows"]
+    assert all(r["category_id"] == rideshare["id"] for r in stored)
+    again = svc.remap_import(conn, import_id, [
+        {"match": {"contains": "UBER"}, "category_id": rideshare["id"]},
+    ])
+    assert again["total_rows"] == 2

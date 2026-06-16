@@ -205,6 +205,67 @@ def _resolve_label(conn, row: dict, pid: int):
     return cat["id"] if cat else None
 
 
+def _matches(rule_match: dict, index: int, row: dict) -> bool:
+    """Return True when *row* (at *index*) satisfies the rule_match predicate.
+
+    Supported keys (first that hits wins):
+      "index"    — exact row position (0-based)
+      "merchant" — exact merchant name match (case-insensitive, stripped)
+      "contains" — substring of merchant (case-insensitive)
+    """
+    if "index" in rule_match:
+        return index == int(rule_match["index"])
+    merchant = (row.get("merchant") or "")
+    if "merchant" in rule_match:
+        return merchant.strip().lower() == str(rule_match["merchant"]).strip().lower()
+    if "contains" in rule_match:
+        return str(rule_match["contains"]).lower() in merchant.lower()
+    return False
+
+
+def remap_import(conn, import_id: int, mapping: list[dict]) -> dict:
+    """Apply a deterministic {match → category_id} mapping to a stored import.
+
+    For each rule in *mapping*, every row whose merchant/index satisfies the
+    rule's ``match`` predicate is reassigned to ``category_id`` (first matching
+    rule wins per row).  Duplicate flags are then recomputed and the rows are
+    persisted.  Returns a fresh ``import_summary``.
+
+    Connection / commit decision
+    ----------------------------
+    ``get_import`` opens its own ``get_db()`` connection (separate from *conn*),
+    so it can only see committed data.  We call ``conn.commit()`` here after the
+    UPDATE so that ``import_summary`` → ``get_import`` reads the freshly mapped
+    rows.  This is acceptable because:
+    * In production the agent calls ``remap_import`` inside its own
+      ``with get_db() as conn`` block — committing here is equivalent to that
+      block exiting cleanly, just a little earlier.
+    * In tests the ``conn`` fixture rolls back at teardown, so the mid-function
+      commit is visible to the fresh connection but the fixture still controls
+      the overall lifecycle.
+    """
+    record = get_import(import_id)
+    pid = record["profile_id"]
+    rows = record["rows"]
+    for index, row in enumerate(rows):
+        for rule in mapping:
+            if _matches(rule.get("match", {}), index, row):
+                cat = cat_svc.get_category(conn, int(rule["category_id"]))
+                if cat["profile_id"] != pid:
+                    raise AppError("category_not_found", "Unknown category", 404)
+                row["category_id"] = cat["id"]
+                row["category"] = cat["name"]
+                break
+    flags = dedup_svc.flag_duplicates(conn, rows, profile_id=pid)
+    for row, flag in zip(rows, flags):
+        row["duplicate"] = flag
+        row["skip"] = flag
+    conn.execute("UPDATE imports SET rows=? WHERE id=?",
+                 (json.dumps(rows), import_id))
+    conn.commit()  # needed so get_import's separate connection sees the update
+    return import_summary(conn, import_id)
+
+
 def import_summary(conn, import_id: int, *, sample_cap: int = 10,
                    unresolved_cap: int = 15) -> dict:
     record = get_import(import_id)
