@@ -10,13 +10,21 @@ from fastapi.responses import StreamingResponse
 from ..agent.runtime import sessions
 from ..db import get_db
 from ..services import chat_store
+from ..services import imports as imports_svc
 from ..services.receipts import build_receipt_prompt
 
 router = APIRouter()
 
+_STATEMENT_EXT = (".csv", ".xlsx", ".xls")
+
 
 def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
+
+
+def _is_statement(filename: str | None) -> bool:
+    name = (filename or "").lower()
+    return name.endswith(_STATEMENT_EXT) or name.endswith(".pdf")
 
 
 @router.get("/api/chat/sessions")
@@ -48,19 +56,37 @@ async def delete_session(session_id: str):
 
 @router.post("/api/chat/sessions/{session_id}/messages")
 async def send_message(session_id: str, message: str = Form(""),
-                       image: UploadFile | None = File(None)):
+                       file: UploadFile | None = File(None)):
     session = sessions.get(session_id, channel="ui")
-    image_bytes = await image.read() if image is not None else None
-    image_mime = (image.content_type or "image/jpeg") if image is not None else None
+    data = await file.read() if file is not None else None
+    filename = file.filename if file is not None else None
+    content_type = file.content_type if file is not None else None
+    is_image = bool(content_type and content_type.startswith("image/"))
 
     async def stream():
         try:
             prompt = message
-            if image_bytes:
+            if data and not is_image and _is_statement(filename):
+                yield _sse({"type": "status", "text": "Reading statement…"})
+                result = await imports_svc.classify_and_start(filename, data)
+                if result["kind"] == "statement":
+                    prompt = (f"{message}\n\n[The user uploaded the statement "
+                              f"'{filename}'. It was parsed as import "
+                              f"#{result['import_id']}. Review it with "
+                              f"get_import_summary and follow the import flow.]")
+                elif result["kind"] == "failed":
+                    yield _sse({"type": "done",
+                                "text": "I couldn't read that statement. "
+                                        "Try a CSV export.",
+                                "error": result.get("error")})
+                    return
+                else:   # receipt (e.g. single-row PDF)
+                    prompt = await build_receipt_prompt(message, data, content_type)
+            elif data:   # image -> receipt
                 yield _sse({"type": "status", "text": "Reading receipt…"})
-                prompt = await build_receipt_prompt(message, image_bytes, image_mime)
+                prompt = await build_receipt_prompt(message, data, content_type)
             if not prompt.strip():
-                yield _sse({"type": "done", "text": "Send a message or receipt.", "error": None})
+                yield _sse({"type": "done", "text": "Send a message or file.", "error": None})
                 return
             async for event in session.run(prompt):
                 yield _sse(event)
