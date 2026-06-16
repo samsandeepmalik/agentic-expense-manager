@@ -19,3 +19,6 @@ goal.md
 docs/arch-review-*.md
 docs/superpowers/
 .playwright-mcp/
+
+# Personal statement CSVs used for local E2E (never commit)
+Incorporation Income and Expense*.csv
