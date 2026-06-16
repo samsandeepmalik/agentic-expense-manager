@@ -11,6 +11,7 @@ import re
 from ..db import get_db
 from ..errors import AppError
 from . import audit
+from . import categories as cat_svc
 from . import dedup as dedup_svc
 from . import profiles as prof_svc
 from . import transactions as txn_svc
@@ -188,3 +189,52 @@ def approve_import(import_id: int, indexes: list[int] | None,
                      ref=str(import_id), detail=detail,
                      profile_id=record["profile_id"])
     return {"created": created, "failed": failed}
+
+
+def _resolve_label(conn, row: dict, pid: int):
+    """Best-effort category id for a parsed row; None if unresolved/ambiguous."""
+    if row.get("category_id"):
+        return int(row["category_id"])
+    name = (row.get("category") or "").strip()
+    if not name:
+        return None
+    try:
+        cat = cat_svc.find_category_by_name(conn, name, profile_id=pid)
+    except AppError:        # ambiguous_category
+        return None
+    return cat["id"] if cat else None
+
+
+def import_summary(conn, import_id: int, *, sample_cap: int = 10,
+                   unresolved_cap: int = 15) -> dict:
+    record = get_import(import_id)
+    pid = record["profile_id"]
+    rows = record["rows"]
+    buckets: dict[str, dict] = {}
+    unresolved: list[dict] = []
+    duplicates = 0
+    for index, row in enumerate(rows):
+        if row.get("duplicate"):
+            duplicates += 1
+        label = (row.get("category") or "(none)").strip() or "(none)"
+        resolved = _resolve_label(conn, row, pid)
+        bucket = buckets.setdefault(
+            label, {"label": label, "count": 0, "resolved_category_id": resolved})
+        bucket["count"] += 1
+        if resolved is None and len(unresolved) < unresolved_cap:
+            unresolved.append({"index": index,
+                               "merchant": row.get("merchant", ""),
+                               "total": row.get("total"),
+                               "guessed": label})
+    return {
+        "import_id": import_id,
+        "profile": prof_svc.get_profile(conn, pid)["name"],
+        "total_rows": len(rows),
+        "duplicates": duplicates,
+        "to_record": sum(1 for r in rows if not r.get("skip")),
+        "parsed_categories": list(buckets.values()),
+        "unresolved": unresolved,
+        "sample": [{"date": r.get("date"), "merchant": r.get("merchant"),
+                    "total": r.get("total"), "category": r.get("category")}
+                   for r in rows[:sample_cap]],
+    }
