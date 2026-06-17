@@ -285,6 +285,7 @@ export default function Settings() {
         id: number; name: string;
         sheet_url: string | null; drive_folder_url: string | null;
         sheet_in_drive: boolean; pending: number;
+        sync_error?: string | null;
       }>;
     }>("/api/google/status") });
   const whatsapp = useQuery({ queryKey: ["whatsapp"], refetchInterval: 4000,
@@ -1009,6 +1010,11 @@ export default function Settings() {
                                   </button>
                                 : <span className="muted">—</span>}
                           </td>
+                          {p.sync_error && (
+                            <td style={{ color: "var(--neg)", fontSize: 12, paddingBottom: 3 }}>
+                              {p.sync_error}
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>

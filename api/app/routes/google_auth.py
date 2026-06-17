@@ -69,7 +69,7 @@ async def put_columns(body: ColumnsIn):
 
 @router.get("/api/google/status")
 async def status():
-    from ..db import get_db
+    from ..db import get_db, get_setting
     from ..services.sync import status as sync_status_fn
     with get_db() as conn:
         all_profiles = [
@@ -85,6 +85,10 @@ async def status():
                 " WHERE sync_status='pending' GROUP BY profile_id"
             )
         }
+        profile_errors = {
+            p["id"]: get_setting(conn, f"sync_error_{p['id']}")
+            for p in all_profiles
+        }
     profiles_info = [
         {
             "id": p["id"],
@@ -99,6 +103,7 @@ async def status():
             ),
             "sheet_in_drive": bool(p["sheet_in_drive"]),
             "pending": pending_by_profile.get(p["id"], 0),
+            "sync_error": profile_errors.get(p["id"]),
         }
         for p in all_profiles
     ]
