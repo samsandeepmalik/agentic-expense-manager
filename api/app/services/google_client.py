@@ -15,6 +15,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 
 from ..config import config
@@ -190,10 +191,7 @@ def sheets_service():
 
 
 def ensure_app_folder() -> str:
-    """Get or create the single root app folder in Drive."""
-    cached = _read(DRIVE_ROOT_FOLDER_ID)
-    if cached:
-        return cached
+    """Get or create the single root app folder in Drive. Always verifies existence."""
     drive = drive_service()
     folder_name = get_folder_base_name()
     results = (
@@ -228,14 +226,7 @@ def ensure_app_folder() -> str:
 
 
 def ensure_drive_folder(profile: dict) -> str:
-    """Get or create the profile subfolder inside the app root folder.
-
-    Short-circuits only when BOTH the app root folder AND the profile subfolder
-    are already known — this prevents stale data from skipping migration when
-    the app root folder didn't exist yet (old single-folder-per-profile layout).
-    """
-    if profile.get("drive_folder_id") and _read(DRIVE_ROOT_FOLDER_ID):
-        return profile["drive_folder_id"]
+    """Get or create the profile subfolder inside the app root folder. Always verifies."""
     app_folder_id = ensure_app_folder()
     drive = drive_service()
     profile_name = profile["name"]
@@ -363,21 +354,31 @@ def upload_receipt_image(filename: str, data: bytes, mime_type: str,
     receipt label alongside the shareable link.
     """
     year = int(date[:4]) if date and len(date) >= 4 else datetime.now().year
-    folder_id = ensure_year_folder(profile, year)
     drive = drive_service()
-    media = MediaIoBaseUpload(io.BytesIO(data), mimetype=mime_type)
-    created = (
-        drive.files()
-        .create(
-            body={"name": filename, "parents": [folder_id]},
-            media_body=media,
-            fields="id, name, webViewLink",
-        )
-        .execute()
-    )
-    # Anyone with the link can view so sheet links work anywhere
-    drive.permissions().create(
-        fileId=created["id"], body={"type": "anyone", "role": "reader"}
-    ).execute()
-    return {"link": created["webViewLink"], "name": created.get("name", filename)}
+    for attempt in range(2):
+        try:
+            folder_id = ensure_year_folder(profile, year)
+            media = MediaIoBaseUpload(io.BytesIO(data), mimetype=mime_type)
+            created = (
+                drive.files()
+                .create(
+                    body={"name": filename, "parents": [folder_id]},
+                    media_body=media,
+                    fields="id, name, webViewLink",
+                )
+                .execute()
+            )
+            # Anyone with the link can view so sheet links work anywhere
+            drive.permissions().create(
+                fileId=created["id"], body={"type": "anyone", "role": "reader"}
+            ).execute()
+            return {"link": created["webViewLink"], "name": created.get("name", filename)}
+        except HttpError as e:
+            if e.resp.status == 404 and attempt == 0:
+                # Year folder gone — invalidate cache entry and retry once
+                cache: dict = _read(DRIVE_YEAR_FOLDERS) or {}
+                cache.pop(f"{profile['id']}:{year}", None)
+                _write(DRIVE_YEAR_FOLDERS, cache)
+                continue
+            raise
 
