@@ -33,7 +33,8 @@ export interface ImportRecord { id: number; filename: string; status: string;
           loan?: boolean; notes?: string; category_id?: number | null;
           receipt_link?: string | null; }[]; }
 export interface Profile { id: number; name: string;
-  kind: "personal" | "incorporation" | "other"; active: boolean; }
+  kind: "personal" | "incorporation" | "other"; active: boolean;
+  prompt_loan: boolean; }
 export interface DuplicateMatch {
   reason: "receipt" | "fields";
   txn: { id: number; date: string; merchant: string; total: number };

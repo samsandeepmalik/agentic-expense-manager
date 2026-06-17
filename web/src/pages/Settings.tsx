@@ -380,6 +380,11 @@ export default function Settings() {
   const removeProfile = useMutation({
     mutationFn: (id: number) => del(`/api/profiles/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["profiles"] }) });
+  const updateProfile = useMutation({
+    mutationFn: ({ id, prompt_loan }: { id: number; prompt_loan: boolean }) =>
+      patch(`/api/profiles/${id}`, { prompt_loan }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["profiles"] }),
+  });
 
   // --- Drive folder name ---
   const [folderName, setFolderName] = useState("");
@@ -814,19 +819,31 @@ export default function Settings() {
             <p className="muted">Separate books — each profile has its own transactions,
               categories, tax profile and Google sheet/folder.</p>
             {(profilesQ.data ?? []).map((p) => (
-              <div key={p.id} className="row" style={{ padding: "6px 0" }}>
-                <b>{p.kind === "incorporation" ? "🏢" : "👤"} {p.name}</b>
-                {p.active
-                  ? <span className="tag income">active</span>
-                  : <button className="ghost"
-                            onClick={() => activateProfile.mutate(p.id)}>Switch to</button>}
-                <span className="grow" />
-                {!p.active && (
-                  <button className="ghost danger"
-                          onClick={() => {
-                            if (window.confirm(`Delete profile '${p.name}'? Its categories and tax settings will be lost.`))
-                              removeProfile.mutate(p.id);
-                          }}>Delete</button>)}
+              <div key={p.id} style={{ padding: "6px 0", borderBottom: "1px solid var(--hairline)" }}>
+                <div className="row">
+                  <b>{p.kind === "incorporation" ? "🏢" : "👤"} {p.name}</b>
+                  {p.active
+                    ? <span className="tag income">active</span>
+                    : <button className="ghost"
+                              onClick={() => activateProfile.mutate(p.id)}>Switch to</button>}
+                  <span className="grow" />
+                  {!p.active && (
+                    <button className="ghost danger"
+                            onClick={() => {
+                              if (window.confirm(`Delete profile '${p.name}'? Its categories and tax settings will be lost.`))
+                                removeProfile.mutate(p.id);
+                            }}>Delete</button>)}
+                </div>
+                <label style={{ display: "flex", alignItems: "center", gap: 6,
+                                fontSize: 12, color: "var(--muted)", marginTop: 4,
+                                cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={!!p.prompt_loan}
+                    onChange={(e) => updateProfile.mutate({ id: p.id, prompt_loan: e.target.checked })}
+                  />
+                  Ask "paid from personal pocket?" when recording expenses (chat &amp; WhatsApp)
+                </label>
               </div>))}
             {removeProfile.error && <p className="neg">
               {(removeProfile.error as Error).message}</p>}
