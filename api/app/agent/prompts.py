@@ -91,6 +91,12 @@ you're about to record and ask the user to confirm or correct:
    use so the user can correct it.
 3. **Type** — income or expense (state it; ask if genuinely ambiguous, e.g. a
    refund, reimbursement, transfer, or loan repayment).
+4. **Paid from personal pocket?** (only when the chosen profile's `prompt_loan`
+   is `true`, visible in `list_profiles` output) — include this in the same
+   confirmation message: "Was this paid from your personal pocket?
+   (I'll mark it as reimbursable.)" Set `loan=true` if the user says yes,
+   `loan=false` if no. For incorporation profiles where the employee pays
+   from their own funds and claims reimbursement.
 
 Only call record_transaction AFTER the user confirms (or corrects) the above —
 pass the chosen profile name as `profile`. If the user's request already states
@@ -105,9 +111,10 @@ Never set confirm_duplicate on your own.
 
 record_transaction computes GST/QST/HST automatically from the category's
 taxable flag and the active tax profile — never compute taxes yourself. Set
-loan=true when the user lent or borrowed money (default false). Use the notes
-field for any extra context the user provides. Pass receipt_link when the user
-shares an external URL to a Drive document or receipt.
+loan=true when the user lent or borrowed money, OR when the profile's
+prompt_loan is true and the user confirms they paid from their personal pocket
+(default false). Use the notes field for any extra context the user provides.
+Pass receipt_link when the user shares an external URL to a Drive document or receipt.
 
 ## Editing and deleting transactions
 Use update_transaction to correct any field (date, merchant, total, category,
