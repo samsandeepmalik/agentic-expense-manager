@@ -71,6 +71,8 @@ def _resolve_category(conn, data: dict, pid: int) -> dict:
 def create_transaction(conn: sqlite3.Connection, data: dict, *,
                        audit_row: bool = True, check_duplicate: bool = False) -> dict:
     pid = data.get("profile_id") or prof_svc.active_id(conn)
+    if not data.get("date", "").strip():
+        raise AppError("invalid_date", "Transaction date is required", 400)
     if check_duplicate and not data.get("confirm_duplicate"):
         dup = dedup.find_duplicate(conn, data, pid)
         if dup is not None:
@@ -167,6 +169,8 @@ def get_transaction(conn, txn_id: int, profile_id: int | None = None) -> dict:
 def update_transaction(conn, txn_id: int, changes: dict,
                        profile_id: int | None = None) -> dict:
     current = get_transaction(conn, txn_id, profile_id)
+    if "date" in changes and not str(changes.get("date", "")).strip():
+        raise AppError("invalid_date", "Transaction date is required", 400)
     merged = current | changes
     pid = current["profile_id"]
     if "category_id" in changes or "category" in changes:
