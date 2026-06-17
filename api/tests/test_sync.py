@@ -275,7 +275,8 @@ def _reconcile_with(grid):
         patch.object(sync.gc, "sheets_service", return_value=_fake_sheets(grid)), \
         patch.object(sync.gc, "ensure_drive_folder", return_value="fake-folder"), \
         patch.object(sync.gc, "find_spreadsheet", return_value=None), \
-        patch.object(sync.gc, "drive_create_spreadsheet", return_value={"id": "del"})
+        patch.object(sync.gc, "drive_create_spreadsheet", return_value={"id": "del"}), \
+        patch.object(sync.gc, "is_spreadsheet_alive", return_value=True)
 
 
 def test_reconcile_deletes_removed_row(conn, db_path):
@@ -288,7 +289,7 @@ def test_reconcile_deletes_removed_row(conn, db_path):
     conn.commit()
     grid: dict = {}
     patches = _reconcile_with(grid)
-    with patches[0], patches[1], patches[2], patches[3], patches[4]:
+    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
         sync.reconcile()   # seed header + rows (full rewrite)
         sync.reconcile()   # idempotent incremental
         before = len(grid["2026"])
@@ -312,7 +313,7 @@ def test_reconcile_deletes_last_and_middle_no_corruption(conn, db_path):
     conn.commit()
     grid: dict = {}
     patches = _reconcile_with(grid)
-    with patches[0], patches[1], patches[2], patches[3], patches[4]:
+    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
         sync.reconcile()
         sync.reconcile()
         # delete middle (ids[1]) and last (ids[3]) in one go
@@ -547,30 +548,36 @@ def test_ensure_spreadsheet_reuses_existing_sheet(conn, monkeypatch):
 
 
 def test_ensure_spreadsheet_recreates_on_404(conn, monkeypatch):
-    from googleapiclient.errors import HttpError
-
     conn.execute("UPDATE profiles SET spreadsheet_id='stale-sheet-id', sheet_in_drive=1 WHERE id=1")
     conn.commit()
     profile = dict(conn.execute("SELECT * FROM profiles WHERE id=1").fetchone())
 
-    fake_resp = MagicMock()
-    fake_resp.status = 404
-    http_error = HttpError(resp=fake_resp, content=b"Not Found")
-
     new_sheet_id = "brand-new-sheet"
-    call_count = [0]
+    # is_spreadsheet_alive returns False (404 / inaccessible)
+    monkeypatch.setattr(sync.gc, "is_spreadsheet_alive", lambda sid: False)
+    monkeypatch.setattr(sync.gc, "sheets_service", lambda: _fake_sheets({}))
+    monkeypatch.setattr(sync.gc, "ensure_drive_folder", lambda p: "fake-folder")
+    monkeypatch.setattr(sync.gc, "find_spreadsheet", lambda name, folder: None)
+    monkeypatch.setattr(sync.gc, "drive_create_spreadsheet",
+                        lambda title, folder_id: {"id": new_sheet_id})
 
-    def sheets_side_effect():
-        call_count[0] += 1
-        if call_count[0] == 1:
-            # First call (verify existing): raise 404
-            svc = MagicMock()
-            svc.spreadsheets.return_value.get.return_value.execute.side_effect = http_error
-            return svc
-        # Subsequent calls: use real fake for post-creation setup
-        return _fake_sheets({})
+    result = sync._ensure_spreadsheet(conn, profile)
 
-    monkeypatch.setattr(sync.gc, "sheets_service", sheets_side_effect)
+    assert result == new_sheet_id
+    row = conn.execute("SELECT spreadsheet_id FROM profiles WHERE id=1").fetchone()
+    assert row["spreadsheet_id"] == new_sheet_id
+
+
+def test_ensure_spreadsheet_recreates_when_trashed(conn, monkeypatch):
+    """Trashed spreadsheet (is_spreadsheet_alive=False) must be replaced."""
+    conn.execute("UPDATE profiles SET spreadsheet_id='trashed-id', sheet_in_drive=1 WHERE id=1")
+    conn.commit()
+    profile = dict(conn.execute("SELECT * FROM profiles WHERE id=1").fetchone())
+
+    new_sheet_id = "fresh-sheet"
+    # is_spreadsheet_alive returns False (file is trashed)
+    monkeypatch.setattr(sync.gc, "is_spreadsheet_alive", lambda sid: False)
+    monkeypatch.setattr(sync.gc, "sheets_service", lambda: _fake_sheets({}))
     monkeypatch.setattr(sync.gc, "ensure_drive_folder", lambda p: "fake-folder")
     monkeypatch.setattr(sync.gc, "find_spreadsheet", lambda name, folder: None)
     monkeypatch.setattr(sync.gc, "drive_create_spreadsheet",

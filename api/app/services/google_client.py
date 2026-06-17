@@ -287,6 +287,23 @@ def find_spreadsheet(name: str, parent_folder_id: str) -> str | None:
     return results[0]["id"] if results else None
 
 
+def is_spreadsheet_alive(spreadsheet_id: str) -> bool:
+    """Return True if the file exists in Drive and is not trashed.
+
+    Uses the Drive API (not Sheets API) so trash status is included.
+    On 403/404 returns False; other HttpErrors propagate.
+    """
+    try:
+        meta = drive_service().files().get(
+            fileId=spreadsheet_id, fields="id,trashed"
+        ).execute()
+        return not meta.get("trashed", False)
+    except HttpError as e:
+        if e.resp.status in (403, 404):
+            return False
+        raise
+
+
 def drive_create_spreadsheet(title: str, parent_folder_id: str) -> dict:
     """Create a Google Sheet directly inside a Drive folder.
 

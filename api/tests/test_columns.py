@@ -81,7 +81,8 @@ def _reconcile(grid, sheet_id="cfg"):
         patch.object(sync.gc, "sheets_service", return_value=_fake_sheets(grid)), \
         patch.object(sync.gc, "ensure_drive_folder", return_value="fake-folder"), \
         patch.object(sync.gc, "find_spreadsheet", return_value=None), \
-        patch.object(sync.gc, "drive_create_spreadsheet", return_value={"id": sheet_id})
+        patch.object(sync.gc, "drive_create_spreadsheet", return_value={"id": sheet_id}), \
+        patch.object(sync.gc, "is_spreadsheet_alive", return_value=True)
 
 
 def test_reconcile_writes_custom_header_order(conn, db_path):
@@ -92,7 +93,7 @@ def test_reconcile_writes_custom_header_order(conn, db_path):
     sync.set_column_config(1, ["id", "merchant", "amount", "date"])
     grid: dict = {}
     p = _reconcile(grid)
-    with p[0], p[1], p[2], p[3], p[4]:
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
         sync.reconcile()
     header = grid["2026"][0]
     assert header == ["ID", "Merchant", "Amount", "Date"]
@@ -106,7 +107,7 @@ def test_reconcile_dropping_amount_does_not_crash_format(conn, db_path):
     sync.set_column_config(1, ["id", "date", "merchant", "notes"])
     grid: dict = {}
     p = _reconcile(grid)
-    with p[0], p[1], p[2], p[3], p[4]:
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
         sync.reconcile()  # must not raise on missing Amount/Date-money col
     header = grid["2026"][0]
     assert "Amount" not in header
@@ -121,7 +122,7 @@ def test_receipt_name_and_link_are_separate_columns(conn, db_path):
     conn.commit()
     grid: dict = {}
     p = _reconcile(grid)
-    with p[0], p[1], p[2], p[3], p[4]:
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
         sync.reconcile()
     header = grid["2026"][0]
     assert "Receipt" in header and "Receipt Link" in header
@@ -147,7 +148,7 @@ def test_totals_row_frozen_at_top_with_sum_formulas(conn, db_path):
     conn.commit()
     grid: dict = {}
     p = _reconcile(grid)
-    with p[0], p[1], p[2], p[3], p[4]:
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
         sync.reconcile()
     rows = grid["2026"]
     assert rows[1][0] == "TOTALS"            # frozen TOTALS at the top (row 2)
@@ -165,7 +166,7 @@ def test_totals_row_not_duplicated_on_resync(conn, db_path):
     conn.commit()
     grid: dict = {}
     p = _reconcile(grid)
-    with p[0], p[1], p[2], p[3], p[4]:
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
         sync.reconcile()
         txn_svc.create_transaction(conn, {
             "date": "2026-06-05", "type": "expense", "category": "Dining",
@@ -187,7 +188,7 @@ def test_legacy_tab_gets_totals_row(conn, db_path):
     conn.commit()
     grid = {"Transactions": []}
     p = _reconcile(grid)
-    with p[0], p[1], p[2], p[3], p[4]:
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
         sync.reconcile()
     rows = grid["Transactions"]
     assert rows[1][0] == "TOTALS"            # legacy tab also gets a frozen TOTALS
@@ -202,7 +203,7 @@ def test_summary_excludes_totals_row(conn, db_path):
                                        "category": "Groceries", "total": 20.0})
     grid: dict = {}
     p = _reconcile(grid, "smtot")
-    with p[0], p[1], p[2], p[3], p[4]:
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
         sync.reconcile()
     flat = [cell for row in grid["Summary"] for cell in row]
     amount_formula = next(c for c in flat if isinstance(c, str)

@@ -18,12 +18,13 @@ def _patches(grid, sid="adv"):
         patch.object(sync.gc, "sheets_service", return_value=_fake_sheets(grid)), \
         patch.object(sync.gc, "ensure_drive_folder", return_value="fake-folder"), \
         patch.object(sync.gc, "find_spreadsheet", return_value=None), \
-        patch.object(sync.gc, "drive_create_spreadsheet", return_value={"id": sid})
+        patch.object(sync.gc, "drive_create_spreadsheet", return_value={"id": sid}), \
+        patch.object(sync.gc, "is_spreadsheet_alive", return_value=True)
 
 
 def _reconcile(grid, sid="adv"):
     p = _patches(grid, sid)
-    with p[0], p[1], p[2], p[3], p[4]:
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
         return sync.reconcile()
 
 
@@ -124,7 +125,7 @@ def test_totals_singleton_through_add_delete_cycles(conn, db_path):
         return t["id"]
 
     p = _patches(grid)
-    with p[0], p[1], p[2], p[3], p[4]:
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
         add(10.0)
         sync.reconcile()
         add(20.0)
@@ -151,7 +152,7 @@ def test_id_map_never_includes_totals(conn, db_path):
     """_sheet_ids_for_tab must skip the TOTALS row (non-numeric id)."""
     grid: dict = {}
     p = _patches(grid)
-    with p[0], p[1], p[2], p[3], p[4]:
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
         for i in range(3):
             txn_svc.create_transaction(conn, {
                 "date": "2026-06-05", "type": "expense",
@@ -327,7 +328,7 @@ def test_config_switch_triggers_full_rewrite(conn, db_path):
     conn.commit()
     grid: dict = {}
     p = _patches(grid)
-    with p[0], p[1], p[2], p[3], p[4]:
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
         sync.reconcile()
         header_before = list(grid["2026"][0])
         # change config: drop most columns

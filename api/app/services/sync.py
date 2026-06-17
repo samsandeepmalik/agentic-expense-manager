@@ -199,20 +199,14 @@ def _ensure_spreadsheet(conn: sqlite3.Connection, profile: dict) -> str:
     folder_id = profile.get("drive_folder_id") or gc.ensure_drive_folder(profile)
 
     if profile["spreadsheet_id"]:
-        try:
-            gc.sheets_service().spreadsheets().get(
-                spreadsheetId=profile["spreadsheet_id"], fields="spreadsheetId"
-            ).execute()
+        if gc.is_spreadsheet_alive(profile["spreadsheet_id"]):
             return profile["spreadsheet_id"]
-        except HttpError as e:
-            if e.resp.status not in (403, 404):
-                raise
-            conn.execute(
-                "UPDATE profiles SET spreadsheet_id=NULL, sheet_in_drive=0 WHERE id=?",
-                (profile["id"],),
-            )
-            profile["spreadsheet_id"] = None
-            profile["sheet_in_drive"] = 0
+        conn.execute(
+            "UPDATE profiles SET spreadsheet_id=NULL, sheet_in_drive=0 WHERE id=?",
+            (profile["id"],),
+        )
+        profile["spreadsheet_id"] = None
+        profile["sheet_in_drive"] = 0
 
     title = f"Expense Manager — {profile['name']}"
     # No id stored — reuse an existing same-named sheet in the folder before
