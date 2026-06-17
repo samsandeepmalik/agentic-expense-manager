@@ -170,3 +170,19 @@ def test_recurring_rule_fires_for_inactive_profile(db_path):
             owner = conn.execute("SELECT profile_id FROM categories WHERE id=?",
                                  (r["category_id"],)).fetchone()["profile_id"]
             assert owner == inc["id"]
+
+
+def test_prompt_loan_column_exists_and_defaults_false(db_path):
+    with get_db() as conn:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(profiles)")}
+        assert "prompt_loan" in cols
+        row = conn.execute("SELECT prompt_loan FROM profiles WHERE id=1").fetchone()
+        assert row["prompt_loan"] == 0
+
+
+def test_prompt_loan_migration_idempotent(db_path):
+    init_db()
+    init_db()
+    with get_db() as conn:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(profiles)")}
+        assert "prompt_loan" in cols

@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   spreadsheet_id TEXT,
   drive_folder_id TEXT,
   sheet_in_drive INTEGER NOT NULL DEFAULT 0,
+  prompt_loan INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS categories (
@@ -163,6 +164,11 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE profiles ADD COLUMN "
                 "sheet_in_drive INTEGER NOT NULL DEFAULT 0")
+        # Migration: prompt_loan flag — agent asks loan question on matching profiles
+        if "prompt_loan" not in prof_cols:
+            conn.execute(
+                "ALTER TABLE profiles ADD COLUMN "
+                "prompt_loan INTEGER NOT NULL DEFAULT 0")
         # Migration: receipt_link column (was settings junk-drawer keys)
         columns = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
         if "receipt_link" not in columns:
