@@ -34,6 +34,15 @@ def set_active(conn, profile_id: int) -> dict:
     return profile
 
 
+def update_profile(conn: sqlite3.Connection, profile_id: int, prompt_loan: bool) -> dict:
+    get_profile(conn, profile_id)  # raises profile_not_found if absent
+    conn.execute(
+        "UPDATE profiles SET prompt_loan=? WHERE id=?",
+        (1 if prompt_loan else 0, profile_id),
+    )
+    return get_profile(conn, profile_id)
+
+
 def create_profile(conn, name: str, kind: str = "personal") -> dict:
     if kind not in ("personal", "incorporation", "other"):
         raise AppError("invalid_kind", "kind must be personal, incorporation or other")

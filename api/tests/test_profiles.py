@@ -186,3 +186,35 @@ def test_prompt_loan_migration_idempotent(db_path):
     with get_db() as conn:
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(profiles)")}
         assert "prompt_loan" in cols
+
+
+def test_update_profile_prompt_loan(db_path):
+    from app.services import profiles as prof_svc
+    with get_db() as conn:
+        profile = prof_svc.create_profile(conn, "Inc", "incorporation")
+        assert profile["prompt_loan"] == 0
+        updated = prof_svc.update_profile(conn, profile["id"], prompt_loan=True)
+        assert updated["prompt_loan"] == 1
+
+    # Persists across connections
+    with get_db() as conn:
+        row = prof_svc.get_profile(conn, profile["id"])
+        assert row["prompt_loan"] == 1
+
+
+def test_update_profile_not_found(db_path):
+    import pytest
+    from app.errors import AppError
+    from app.services import profiles as prof_svc
+    with get_db() as conn:
+        with pytest.raises(AppError) as exc_info:
+            prof_svc.update_profile(conn, 999, prompt_loan=True)
+        assert exc_info.value.code == "profile_not_found"
+
+
+def test_list_profiles_includes_prompt_loan(db_path):
+    from app.services import profiles as prof_svc
+    with get_db() as conn:
+        profiles = prof_svc.list_profiles(conn)
+        assert all("prompt_loan" in p for p in profiles)
+        assert profiles[0]["prompt_loan"] == 0

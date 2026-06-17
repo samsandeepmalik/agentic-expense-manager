@@ -17,6 +17,10 @@ class ProfileIn(BaseModel):
     kind: str = Field(default="personal", pattern="^(personal|incorporation|other)$")
 
 
+class PatchProfileIn(BaseModel):
+    prompt_loan: bool
+
+
 @router.get("/api/profiles")
 async def list_profiles():
     with get_db() as conn:
@@ -38,6 +42,16 @@ async def activate(profile_id: int):
         profile = svc.set_active(conn, profile_id)
         audit.record(conn, "profile_activated", channel="ui",
                      ref=str(profile_id), detail=profile["name"])
+        return profile
+
+
+@router.patch("/api/profiles/{profile_id}")
+async def patch_profile(profile_id: int, body: PatchProfileIn):
+    with get_db() as conn:
+        profile = svc.update_profile(conn, profile_id, body.prompt_loan)
+        audit.record(conn, "profile_updated", channel="ui",
+                     ref=str(profile_id),
+                     detail=f"prompt_loan={body.prompt_loan}")
         return profile
 
 
