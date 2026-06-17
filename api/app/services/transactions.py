@@ -71,7 +71,7 @@ def _resolve_category(conn, data: dict, pid: int) -> dict:
 def create_transaction(conn: sqlite3.Connection, data: dict, *,
                        audit_row: bool = True, check_duplicate: bool = False) -> dict:
     pid = data.get("profile_id") or prof_svc.active_id(conn)
-    if not data.get("date", "").strip():
+    if not str(data.get("date") or "").strip():
         raise AppError("invalid_date", "Transaction date is required", 400)
     if check_duplicate and not data.get("confirm_duplicate"):
         dup = dedup.find_duplicate(conn, data, pid)
