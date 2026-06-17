@@ -98,7 +98,7 @@ def test_ensure_app_folder_creates_root(monkeypatch, db_path):
     assert folder_id == "new-year-id"
 
 
-def test_ensure_app_folder_caches_result(monkeypatch, db_path):
+def test_ensure_app_folder_always_calls_drive_even_when_cached(monkeypatch, db_path):
     from app.db import get_db, set_setting
     from app.settings_keys import DRIVE_ROOT_FOLDER_ID as KEY
 
@@ -106,14 +106,14 @@ def test_ensure_app_folder_caches_result(monkeypatch, db_path):
         set_setting(conn, KEY, "cached-root-id")
 
     call_count = [0]
-    def bad_drive():
+    def counting_drive():
         call_count[0] += 1
-        return FakeDriveYear()
-    monkeypatch.setattr(gc, "drive_service", bad_drive)
+        return FakeDriveYear(list_result=[{"id": "cached-root-id"}])
+    monkeypatch.setattr(gc, "drive_service", counting_drive)
 
     folder_id = gc.ensure_app_folder()
+    assert call_count[0] > 0          # Drive was called despite cached setting
     assert folder_id == "cached-root-id"
-    assert call_count[0] == 0
 
 
 def test_ensure_drive_folder_uses_base_name(monkeypatch, db_path):
@@ -131,13 +131,13 @@ def test_ensure_drive_folder_uses_base_name(monkeypatch, db_path):
     assert folder_id == "new-folder-id"
 
 
-def test_ensure_drive_folder_skips_create_if_already_set(monkeypatch, db_path):
-    from app.db import get_db, set_setting
-    from app.settings_keys import DRIVE_ROOT_FOLDER_ID
-    with get_db() as conn:
-        set_setting(conn, DRIVE_ROOT_FOLDER_ID, "fake-root-id")
+def test_ensure_drive_folder_always_calls_drive_even_when_cached(monkeypatch, db_path):
     profile = {"id": 1, "name": "Personal", "drive_folder_id": "existing-id"}
-    assert gc.ensure_drive_folder(profile) == "existing-id"
+    monkeypatch.setattr(gc, "ensure_app_folder", lambda: "fake-root")
+    monkeypatch.setattr(gc, "drive_service",
+                        lambda: FakeDriveYear(list_result=[{"id": "existing-id"}]))
+    result = gc.ensure_drive_folder(profile)
+    assert result == "existing-id"   # existing found, not created
 
 
 # ---------------------------------------------------------------------------

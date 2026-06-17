@@ -255,3 +255,25 @@ def test_check_duplicate_off_by_default_inserts(conn):
     svc.create_transaction(conn, _dupbase())
     row = svc.create_transaction(conn, _dupbase())  # no check → recurring/import path
     assert row["id"] > 0
+
+
+def test_create_transaction_rejects_empty_string_date(conn):
+    with pytest.raises(AppError) as exc_info:
+        svc.create_transaction(conn, {
+            "date": "", "type": "expense", "category": "Groceries", "total": 10.0})
+    assert exc_info.value.code == "invalid_date"
+
+
+def test_create_transaction_rejects_none_date(conn):
+    with pytest.raises(AppError) as exc_info:
+        svc.create_transaction(conn, {
+            "date": None, "type": "expense", "category": "Groceries", "total": 10.0})
+    assert exc_info.value.code == "invalid_date"
+
+
+def test_update_transaction_rejects_empty_string_date(conn):
+    txn = svc.create_transaction(conn, {
+        "date": "2026-06-05", "type": "expense", "category": "Groceries", "total": 10.0})
+    with pytest.raises(AppError) as exc_info:
+        svc.update_transaction(conn, txn["id"], {"date": ""})
+    assert exc_info.value.code == "invalid_date"
