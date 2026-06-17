@@ -17,6 +17,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from googleapiclient.errors import HttpError
+
 from ..db import get_db, get_setting, set_setting
 from ..settings_keys import (
     LAST_SYNC_AT, LAST_SYNC_COUNT, LAST_SYNC_ERROR, SHEET_COLUMN_CONFIG,
@@ -197,7 +199,20 @@ def _ensure_spreadsheet(conn: sqlite3.Connection, profile: dict) -> str:
     folder_id = profile.get("drive_folder_id") or gc.ensure_drive_folder(profile)
 
     if profile["spreadsheet_id"]:
-        return profile["spreadsheet_id"]
+        try:
+            gc.sheets_service().spreadsheets().get(
+                spreadsheetId=profile["spreadsheet_id"], fields="spreadsheetId"
+            ).execute()
+            return profile["spreadsheet_id"]
+        except HttpError as e:
+            if e.resp.status not in (403, 404):
+                raise
+            conn.execute(
+                "UPDATE profiles SET spreadsheet_id=NULL, sheet_in_drive=0 WHERE id=?",
+                (profile["id"],),
+            )
+            profile["spreadsheet_id"] = None
+            profile["sheet_in_drive"] = 0
 
     title = f"Expense Manager — {profile['name']}"
     # No id stored — reuse an existing same-named sheet in the folder before
@@ -501,59 +516,72 @@ def _reconcile_tab(conn, sheets, spreadsheet_id: str, tab: str,
     return pushed
 
 
+def _reconcile_profile(profile: dict) -> int:
+    """Sync one profile to its Google Sheet. Returns rows pushed."""
+    from .transactions import list_transactions
+
+    folder_id = gc.ensure_drive_folder(profile)
+    profile["drive_folder_id"] = folder_id
+
+    with get_db() as conn:
+        spreadsheet_id = _ensure_spreadsheet(conn, profile)
+        sheets = gc.sheets_service()
+        tabs = _tab_meta(sheets, spreadsheet_id)
+        txns = list_transactions(conn, limit=100000, profile_id=profile["id"])
+        tax_cols = _tax_columns(conn, profile["id"], txns)
+        cols = _resolve_columns(profile["id"], tax_cols)
+
+        if SHEET_NAME in tabs:
+            return _reconcile_tab(
+                conn, sheets, spreadsheet_id, SHEET_NAME, txns, profile,
+                cols, tabs[SHEET_NAME],
+            )
+        else:
+            txns_by_year: dict[int, list] = defaultdict(list)
+            for txn in txns:
+                date = txn.get("date") or ""
+                if len(date) < 4:
+                    logger.warning(
+                        "txn id=%s has invalid date %r — skipped from sync",
+                        txn["id"], date,
+                    )
+                    continue
+                txns_by_year[int(date[:4])].append(txn)
+
+            existing_year_tabs = {int(t) for t in tabs if _YEAR_RE.match(t)}
+            year_tab_titles: list[str] = []
+            pushed = 0
+            for year in sorted(set(txns_by_year.keys()) | existing_year_tabs):
+                tab, sheet_id = _ensure_year_tab(
+                    sheets, spreadsheet_id, year, cols)
+                year_tab_titles.append(tab)
+                pushed += _reconcile_tab(
+                    conn, sheets, spreadsheet_id, tab,
+                    txns_by_year.get(year, []), profile, cols, sheet_id,
+                )
+            _update_summary_tab(sheets, spreadsheet_id, year_tab_titles, cols)
+            return pushed
+
+
 def reconcile() -> dict:
     """Push all pending/missing transactions, one spreadsheet per profile."""
     if not sync_enabled():
         return {"synced": 0, "skipped": "google_not_connected"}
-    from .transactions import list_transactions
 
     total_pushed = 0
     with get_db() as conn:
         profiles = [dict(r) for r in conn.execute("SELECT * FROM profiles")]
 
     for profile in profiles:
-        # Eagerly create Drive folder so it appears immediately after connecting,
-        # not only when the first receipt is uploaded.
-        folder_id = gc.ensure_drive_folder(profile)
-        profile["drive_folder_id"] = folder_id  # keep in-memory dict consistent
-
-        with get_db() as conn:
-            spreadsheet_id = _ensure_spreadsheet(conn, profile)
-            sheets = gc.sheets_service()
-            tabs = _tab_meta(sheets, spreadsheet_id)
-            txns = list_transactions(conn, limit=100000, profile_id=profile["id"])
-            # Compute the tax-column set ONCE per profile from ALL its txns so
-            # every year-tab gets identical, stable headers (no per-year churn).
-            tax_cols = _tax_columns(conn, profile["id"], txns)
-            # Resolve the profile's configured column layout once (tax expands
-            # into one column per component). Header + row + format all derive
-            # from this same list, so there is no positional drift.
-            cols = _resolve_columns(profile["id"], tax_cols)
-
-            if SHEET_NAME in tabs:
-                # Legacy single-tab layout
-                total_pushed += _reconcile_tab(
-                    conn, sheets, spreadsheet_id, SHEET_NAME, txns, profile,
-                    cols, tabs[SHEET_NAME],
-                )
-            else:
-                # Year-based tabs
-                txns_by_year: dict[int, list] = defaultdict(list)
-                for txn in txns:
-                    txns_by_year[int(txn["date"][:4])].append(txn)
-
-                existing_year_tabs = {int(t) for t in tabs if _YEAR_RE.match(t)}
-                year_tab_titles: list[str] = []
-                for year in sorted(set(txns_by_year.keys()) | existing_year_tabs):
-                    tab, sheet_id = _ensure_year_tab(
-                        sheets, spreadsheet_id, year, cols)
-                    year_tab_titles.append(tab)
-                    total_pushed += _reconcile_tab(
-                        conn, sheets, spreadsheet_id, tab,
-                        txns_by_year.get(year, []), profile, cols, sheet_id,
-                    )
-                _update_summary_tab(
-                    sheets, spreadsheet_id, year_tab_titles, cols)
+        try:
+            pushed = _reconcile_profile(profile)
+            total_pushed += pushed
+            with get_db() as conn:
+                set_setting(conn, f"sync_error_{profile['id']}", None)
+        except Exception as exc:
+            logger.error("Sync failed for profile %s: %s", profile["name"], exc)
+            with get_db() as conn:
+                set_setting(conn, f"sync_error_{profile['id']}", str(exc))
 
     return {"synced": total_pushed}
 
