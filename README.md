@@ -25,7 +25,7 @@ Income and expense tracker with a Claude agent, receipt OCR, a warm web dashboar
 | **Strict layering, zero frontend math** | Routes validate and delegate; services own all SQL and money math; the React app renders what the API computes. All tax logic lives behind one `_compute` path. |
 | **Server-side tax back-calculation** | Enter the total paid; GST/QST/HST are derived from the category's taxable flag and the active tax profile — computed once, reused identically by the REST API, the chat agent, and the live quick-add preview. |
 | **One agent, two channels** | A single Claude tool-calling agent backs both web chat and WhatsApp off the same service layer — no duplicated business logic per channel. |
-| **Idempotent one-way Google sync** | Writes set a dirty flag; a debounced worker reconciles each profile's Sheet/Drive by mapping transaction id → row. Missing rows are removed via `deleteDimension`, not blanked. |
+| **Idempotent one-way Google sync** | Writes set a dirty flag; a debounced worker reconciles each profile's Sheet/Drive by mapping transaction id → row. Missing rows are removed via `deleteDimension`, not blanked. A **Re-sync Now** path (`force_full=True`) clears and rewrites the active profile's sheet in date order — restoring deleted rows and fixing ordering drift without touching other profiles. Trashed or deleted spreadsheets are auto-detected via the Drive API and recreated. |
 | **Crash-safe SQLite migrations** | Idempotent migrations with atomic table rebuilds that recover orphaned scratch tables from an interrupted prior run. |
 | **Profiles as full data partitions** | Each profile owns its transactions, categories, tax profile, Google Sheet, and Drive folder; every query is scoped to the active profile. |
 | **Tested, not asserted** | 268+ backend tests including an adversarial sync suite designed to break reconciliation, with dependency-injected seams instead of internal patching. |
@@ -51,7 +51,7 @@ See [docs/architecture.md](docs/architecture.md) for diagrams and the reasoning 
 | **Recurring rules** | Rent/salary templates auto-record on schedule. Create, edit, and pause/resume in Settings or via the agent. |
 | **Tax profiles** | Create/edit tax profiles and their rate components in Settings, or activate a preset (Quebec / Ontario / Alberta). |
 | **Audit trail** | Every write and sync outcome logged with channel and profile. Settings → Activity. |
-| **Google sync** | One-way mirror (app → Sheet + Drive), debounced, idempotent, never read back. Per-profile sheet + folder. Choose columns and order with a live preview; frozen TOTALS row; receipts shown as name + Drive link. |
+| **Google sync** | One-way mirror (app → Sheet + Drive), debounced, idempotent, never read back. Per-profile sheet + folder. Choose columns and order with a live preview; frozen TOTALS row; receipts shown as name + Drive link. **Re-sync Now** button rewrites the active profile's sheet from scratch in date order — use to restore deleted rows or fix ordering. Trashed/deleted sheets are auto-detected and recreated. |
 
 ---
 

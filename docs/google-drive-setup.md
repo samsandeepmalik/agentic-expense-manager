@@ -77,6 +77,29 @@ The sheet has one tab per calendar year (`2025`, `2026`, …), current year alwa
 
 The app only accesses files it creates (`drive.file` scope). Your existing Google Drive files are never touched.
 
+## Sync modes
+
+Two sync modes are available. Understanding which to use saves time when the sheet looks wrong.
+
+| | Auto-sync | Re-sync Now |
+|---|---|---|
+| **Trigger** | Any transaction write (2 s debounce) | Settings → Google sync → **Re-sync now** button |
+| **Scope** | All profiles | Active profile only |
+| **What it writes** | Changed or new rows only — existing synced rows are skipped | Full rewrite — clears each tab, rewrites every transaction in date order (newest first) |
+| **Row order** | New rows appended to the bottom | All rows rewritten newest-first |
+| **Speed** | Fast (few API calls) | Slower (all rows, all year tabs + Summary) |
+
+**Use Re-sync Now when:**
+
+- You deleted rows from the sheet and want them restored.
+- New transactions landed at the bottom of the sheet instead of the top (this is normal after auto-sync — Re-sync Now resets the order).
+- You edited cells manually and want the app's data to overwrite them.
+
+**You do NOT need Re-sync Now when:**
+
+- The sheet or spreadsheet was trashed or deleted — the app detects this automatically on the next write and recreates the sheet with a full rewrite.
+- Transactions are just not showing up yet — wait 2–3 seconds after a write, or check **Settings → Google sync** for a sync error.
+
 ## App folder name
 
 Under **Settings → Google sync → App folder name** you can change the root folder name from "Expense Manager" to anything you prefer. The rest of the layout (profile subfolder → sheet + year folders) stays the same.
@@ -102,10 +125,14 @@ The Google Sheets API is not enabled. Go to **APIs & Services → Library → Go
 ### `Invalid grant` / `Missing code verifier`
 The PKCE verifier was not persisted correctly between the auth URL and callback. This is fixed in the current version. If it recurs, clear your browser cache and start the OAuth flow fresh.
 
+### New transactions appear at the bottom of the sheet, not the top
+Auto-sync appends new rows to the bottom of the existing sheet — this is expected behaviour. The TOTALS row sums all rows regardless of order, so no money is missing. To restore newest-first ordering, click **Re-sync Now** in **Settings → Google sync**. This rewrites the active profile's sheet from scratch in date order.
+
 ### Sheet not updating after sync
-- Check **Settings → Google sync** for a `Last sync error` message.
-- The sync is debounced by 2 seconds — wait a moment and check `GET /api/sync/status`.
-- Click **Sync now** to force an immediate reconcile.
+- Check **Settings → Google sync** for a sync error next to the affected profile.
+- Auto-sync is debounced by 2 seconds — wait a moment after a write, then check.
+- If rows are missing or out of order, click **Re-sync Now** to do a full rewrite of the active profile's sheet.
+- If the error persists, check `GET /api/sync/status` or `make logs-api` for the root cause.
 
 ### Duplicate sheets or orphan Drive files
 If you disconnected and reconnected Google, or changed the app folder name and changed it back, you may end up with duplicate spreadsheets or stale receipt files in Drive. The app avoids creating duplicates by reusing an existing same-named sheet before creating a new one, but pre-existing duplicates from earlier versions may persist.

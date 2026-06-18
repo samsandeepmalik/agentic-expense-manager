@@ -223,9 +223,11 @@ flowchart LR
     -- "request_sync()<br/>(thread-safe dirty flag)" --> WORKER
 
     WORKER["sync_worker<br/>debounce 2s, coalesce bursts"]
-    -- reconcile --> SHEET["Google Sheet<br/>(ID column → idempotent upsert)"]
+    -- "reconcile()<br/>(incremental)" --> SHEET["Google Sheet<br/>(ID column → idempotent upsert)"]
     WORKER -- "receipt upload" --> DRIVE[Drive folder]
     HOURLY["scheduler (hourly)"] -- reconcile --> SHEET
+    RESYNC["POST /api/sync/resync<br/>(Re-sync Now button)"]
+    -- "resync_active_profile()<br/>force_full=True" --> SHEET
     WORKER -- "outcome → audit_log +<br/>last_error setting" --> DB[(SQLite)]
 ```
 
@@ -234,16 +236,60 @@ thread-safe dirty flag. One long-lived `sync_worker` debounces bursts (~2s) and
 runs a single `reconcile()` per burst; an hourly scheduler tick also reconciles
 as a catch-up.
 
-**Idempotent reconcile.** The sheet's ID column maps app txn id → row. Pending
-or missing rows are upserted; rows whose txn id no longer exists are *removed*
-with `deleteDimension` (not blanked). Sync never reads data back.
+**Reconcile paths.** `_reconcile_tab` (`services/sync.py`) takes one of two paths
+per tab on each reconcile:
+
+| Path | Trigger | What happens |
+|---|---|---|
+| **Full rewrite** | Header changed, TOTALS row missing, or `force_full=True` | Tab cleared; all txns written in `date DESC, id DESC` order; all marked `synced`; `_format_tab` re-applies freeze + number formatting |
+| **Incremental** | Header + TOTALS intact (normal auto-sync) | Only `sync_status='pending'` or new-to-sheet txns processed; synced rows already in the sheet are skipped; rows whose txn id is gone are removed via `deleteDimension` |
+
+Incremental is the auto-sync default — fast, low API call count, only touches
+dirty or missing rows. The trade-off: new rows are appended to the bottom of the
+tab, so date order drifts over time as transactions are added after the last
+full rewrite.
+
+**Re-sync Now.** `POST /api/sync/resync` → `resync_active_profile()` →
+`_reconcile_profile(profile, force_full=True)` on the **active profile only**.
+Forces a full rewrite: clears each year tab (or the legacy `Transactions` tab),
+writes all transactions in `date DESC, id DESC` order, then regenerates the
+Summary tab. Use when:
+
+- Rows were deleted from the sheet and need restoring.
+- New transactions landed at the sheet bottom (incremental drift) and date order
+  needs to be reset.
+- Manual cell edits should be overwritten by the app's authoritative data.
+
+Other profiles are not affected. The auto-sync worker always runs `reconcile()`
+(incremental); only the manual button triggers `force_full`.
+
+**Drive and sheet liveness.** `ensure_drive_folder` queries Drive on every
+reconcile — never uses a stale cached folder ID — so a deleted profile subfolder
+is recreated transparently. `is_spreadsheet_alive(spreadsheet_id)` checks liveness
+via the Drive API `files.get(fields="id,trashed")`. The Sheets API returns HTTP
+200 for trashed files, making it unsuitable for this check. On `trashed=true`,
+403, or 404, the stored `spreadsheet_id` is cleared from the profile row and the
+next reconcile creates a fresh sheet with a full rewrite.
+
+**Per-profile isolation.** Each profile mirrors to its own spreadsheet
+(`Expense Manager — {name}`) and Drive subfolder, with the ids stored on the
+`profiles` row. `reconcile()` loops every profile, lazily creating its sheet and
+folder on first sync. Creation is idempotent: an existing same-named sheet in the
+folder is reused before a new one is created, preventing duplicates on reconnect.
+
+**Per-profile error isolation.** `reconcile()` wraps each profile in its own
+`try/except`. A failure (e.g. a Drive API error on one profile) stores the error
+string in the `sync_error_{profile_id}` settings key, which is displayed
+per-profile in Settings → Google sync; the remaining profiles continue. The global
+`LAST_SYNC_ERROR` key captures the most recent failure across all profiles.
 
 **Configurable per-profile columns.** A column registry (`COLUMN_REGISTRY`)
 drives the sheet, and each profile stores its own ordered selection
 (`SHEET_COLUMN_CONFIG`, edited via `GET/PUT /api/google/columns` and the Settings
 checklist). Header, data row, and number formatting all derive from that one
 resolved list, so there is no positional drift. `id` is always present and first
-(keeps the id→row map valid). Changing the set or order rewrites the whole tab.
+(keeps the id→row map valid). Changing the set or order triggers a full rewrite
+on the next reconcile.
 
 - *Available columns:* ID, Date, Type, Category, Sub-category, Description,
   Merchant, Amount, per-component tax columns, Total, Counted % (the category
@@ -256,22 +302,18 @@ resolved list, so there is no positional drift. `id` is always present and first
 **Frozen TOTALS row.** Row 1 is the header; row 2 is a frozen, coloured `TOTALS`
 row (both rows frozen, so totals stay visible while scrolling); data starts at
 row 3. Each money column holds an open-ended `=SUM(col3:col)`, so totals
-auto-extend as rows are appended — no recompute on add or delete.
-
-**Per-profile isolation.** Each profile mirrors to its own spreadsheet (`Expense
-Manager — {name}`) and Drive subfolder, with the ids stored on the `profiles`
-row. `reconcile()` loops every profile, lazily creating its sheet and folder on
-first sync. Creation is idempotent: an existing same-named sheet in the folder is
-reused before a new one is created, preventing duplicates on reconnect.
+auto-extend as rows are appended or removed — no recompute on add or delete.
 
 **Layout details.**
 
 - *Year tabs:* new spreadsheets get one tab per calendar year (current year
   leftmost) plus a cross-year **Summary** tab that sums each year (open-ended
-  from row 3, so per-tab `TOTALS` rows are never double-counted). Legacy
-  single-`Transactions`-tab sheets keep that layout but still get the frozen row.
+  from row 3, so per-tab `TOTALS` rows are never double-counted). A full rewrite
+  updates all year tabs and regenerates the Summary tab. Legacy
+  single-`Transactions`-tab sheets keep that layout and also receive the frozen
+  TOTALS row.
 - *Drive folders:* receipts are stored as
-  `{base_name} — {profile_name}/{year}/{date}_{id}_{merchant}.{ext}`; year-folder
+  `{base_name}/{profile_name}/{year}/{date}_{id}_{merchant}.{ext}`; year-folder
   ids are cached in settings to avoid a Drive list call per upload.
 
 **Failures** land in `audit_log` and the `last_error` setting (shown in

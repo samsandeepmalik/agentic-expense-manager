@@ -58,7 +58,7 @@ api/app/
     tax.py periods.py categories.py recurring.py chat_store.py
                            categories: one-level nesting via parent_id (0=top);
                            UNIQUE(name, profile_id, parent_id)
-    profiles.py            CRUD + active_id(conn); all services scope to active
+    profiles.py            CRUD + active_id(conn) + update_profile(prompt_loan); all services scope to active
     receipts.py            OCR intake (image/PDF→prompt; PyMuPDF renders PDF pages to PNG) AND lazy Drive download
     imports.py             statement upload → agent parses rows → review/approve.
                            classify_and_start routes a CHAT upload (receipt vs
@@ -114,14 +114,18 @@ web/src/
   re-submits with `confirm_duplicate` to override. Recurring + import do NOT
   opt in (rent monthly isn't a dup; import has its own grid flagging).
 - **Profiles**: full data partition — each profile owns its transactions,
-  categories, tax_profile and its OWN Google sheet + Drive folder. Active
-  profile is a settings key; services scope every query via
-  `profiles.active_id(conn)`. Recurring rules fire under their own
-  rule.profile_id, not the active one.
+  categories, tax_profile and its OWN Google sheet + Drive folder, plus a
+  `prompt_loan` flag that tells the chat/WhatsApp agent to ask "Was this paid
+  from your personal pocket?" before recording (sets `loan=true` if yes — for
+  incorporation profiles where employees claim reimbursement). Active profile is
+  a settings key; services scope every query via `profiles.active_id(conn)`.
+  Recurring rules fire under their own rule.profile_id, not the active one.
 - **Chat**: routes/chat SSE → runtime.Session → tools → services. UI specs
   from `render_ui` rendered verbatim by GenUI.tsx. Before recording a txn
-  the agent confirms the target profile (when 2+ profiles exist) and the
-  category/sub-category; tools: `list_profiles`, `set_active_profile`. To read/
+  the agent confirms the target profile (when 2+ profiles exist), the
+  category/sub-category, the type, and — when the chosen profile's
+  `prompt_loan` is true — whether the expense was paid from personal pocket
+  (sets `loan=true` if yes); tools: `list_profiles`, `set_active_profile`. To read/
   write a NON-active book the agent passes `profile` per call (never switches
   active). On a duplicate the tool returns `{duplicate:true,…}` → agent warns,
   re-calls with `confirm_duplicate=true` only after the user agrees. Chat also
