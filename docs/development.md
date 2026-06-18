@@ -1,17 +1,22 @@
 # Development
 
-Contributor guide for the Expense Manager backend (FastAPI + SQLite) and
-frontend (React/Vite). For architecture diagrams and design decisions see
-[docs/architecture.md](architecture.md).
+**Dev setup, test conventions, API surface, and how-to guides.** For system design and diagrams see [Architecture](architecture.md); for PR guidelines see [Contributing](../CONTRIBUTING.md).
+
+*Read this when:* setting up a local dev environment · adding an endpoint, agent tool, or OCR provider · writing or debugging tests
+
+---
 
 ## Prerequisites
 
-- Python 3.13 + [Poetry](https://python-poetry.org)
-- Node 22
-- `libmagic` (neonize needs it): `brew install libmagic` / `apt install libmagic1`
-- Docker (only for the `make start` path)
-- `.env` at repo root (`cp .env.example .env`) with at least
-  `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) or `ANTHROPIC_API_KEY`
+| Requirement | Notes |
+|---|---|
+| Python 3.13 + [Poetry](https://python-poetry.org) | Backend runtime and dependency management |
+| Node 22 | Frontend toolchain |
+| `libmagic` | neonize dependency — `brew install libmagic` / `apt install libmagic1` |
+| Docker | Only for the `make start` path |
+| `.env` at repo root | `cp .env.example .env`; set at least `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` |
+
+---
 
 ## Run
 
@@ -32,10 +37,12 @@ State lives in `./data/` at the repo root (both Docker and `make dev-api` use
 this path; `DATA_DIR` defaults there). Delete `./data/expense.db*` for a fresh
 DB (schema + seeds recreate on boot).
 
+---
+
 ## Test & build
 
 ```bash
-cd api && poetry run pytest -v        # backend suite (~235 tests, ~3s)
+cd api && poetry run pytest -v        # backend suite (~268 tests, ~3s)
 cd web && npm run build               # tsc --noEmit + vite build
 ```
 
@@ -58,6 +65,8 @@ Run both after every change. **Never commit on red.**
   The upgrade-existing-DB path is covered exclusively by
   `tests/test_legacy_migration.py` — add cases there when adding idempotent
   migrations.
+
+---
 
 ## Conventions
 
@@ -86,6 +95,8 @@ Run both after every change. **Never commit on red.**
 - Sub-categories: `categories` has a `parent_id INTEGER NOT NULL DEFAULT 0`
   column; `0` means top-level. The unique constraint is
   `UNIQUE(name, profile_id, parent_id)` (one level deep only).
+
+---
 
 ## How to add things
 
@@ -118,6 +129,8 @@ human-facing path that should warn on duplicates, pass `check_duplicate=True` an
 handle the `duplicate_suspected` `AppError` (let `confirm_duplicate` in the data
 bypass it); leave it off for batch/automated paths (recurring, import).
 
+---
+
 ## API surface
 
 | Endpoint | Purpose |
@@ -133,7 +146,7 @@ bypass it); leave it off for batch/automated paths (recurring, import).
 | `GET/POST/DELETE /api/chat/sessions` · `POST .../messages` (SSE) | chat sessions; `messages` accepts a generic `file` (image → receipt OCR; CSV/XLSX/PDF → statement import, driven by the agent via the `get_import_summary`/`remap_import`/`approve_import` tools) |
 | `GET/POST /api/settings/ocr` | OCR provider selection |
 | `GET /api/sync/status` · `POST /api/sync/now` | Google sync |
-| `GET/POST /api/profiles` · `POST /{id}/activate` · `DELETE /{id}` | profiles (separate books) |
+| `GET/POST /api/profiles` · `PATCH /{id}` · `POST /{id}/activate` · `DELETE /{id}` | profiles (separate books); `PATCH` updates `prompt_loan` flag |
 | `GET/POST /api/whatsapp/accounts` · `DELETE /{id}` · `POST /{id}/refresh` · `GET /{id}/qr` | account pairing, unpair, QR refresh/fetch |
 | `GET /api/whatsapp/status` | overall WhatsApp channel status |
 | `GET/POST/DELETE /api/whatsapp/allowed` | sender allowlist |
@@ -154,10 +167,14 @@ Receipt PDF rendering uses `PyMuPDF` (`fitz`) — already in the Poetry
 lockfile. Drive receipt uploads derive MIME type via `mimetypes` (not
 hardcoded), so any file type stored as a receipt uploads correctly.
 
+---
+
 ## Periods
 
 `?period=` accepts `2026-06`, `last3`, `last6`, `ytd`,
 `YYYY-MM-DD:YYYY-MM-DD`; default = current month.
+
+---
 
 ## Debugging
 
@@ -169,6 +186,8 @@ hardcoded), so any file type stored as a receipt uploads correctly.
 - WhatsApp QR expired? Settings → Refresh QR (codes die ~20s after issue).
 - Agent misbehaving? The full prompt is in `app/agent/prompts.py`; tool
   results are JSON-serialized service returns.
+
+---
 
 ## Protected code — do not change behavior
 

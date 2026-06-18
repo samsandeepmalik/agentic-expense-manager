@@ -1,6 +1,10 @@
 # Architecture
 
-This document explains the **how and why** of design decisions and system structure — not features or setup. For running the app see the [README](../README.md); for contributing and test conventions see [docs/development.md](development.md).
+**Design decisions, system structure, and data flows.** For features and quickstart see the [README](../README.md); for dev setup and test conventions see [Development](development.md); for PR guidelines see [Contributing](../CONTRIBUTING.md).
+
+*Read this when:* understanding how layers interact · adding a new channel, agent tool, or sync column · debugging unexpected data or sync behavior
+
+---
 
 Local-first: **SQLite is the only source of truth**. Google is a one-way, optional mirror. The frontend contains zero business logic — every dollar figure is computed server-side.
 
@@ -49,13 +53,18 @@ agent/       pi-agent runtime, Claude provider, tool definitions
 db.py        connection, schema, seeds, migrations, settings KV
 ```
 
-Rules that keep it clean:
+### Boundaries
 
+- Routes do not execute SQL directly — all SQL lives in `services/`.
+- Services do not import from `routes/` or `agent/`.
+- `agent/tools.py` wraps services; it does not duplicate their logic.
+- `channels/` normalises the transport; it does not own business rules.
 - Every service function takes `conn: sqlite3.Connection` as its first arg —
   no hidden globals. Routes wrap calls in `with get_db() as conn:`.
 - Money math lives in **one** place: `services/transactions._compute` →
   `services/tax.back_calculate`. Create, update, and bulk recategorize all
   reuse it. `round(x, 2)` at service boundaries.
+- The duplicate rule lives **only** in `dedup.find_duplicate` — change it there, nowhere else.
 - API errors are `AppError(code, message, status, details=None)` → rendered by
   `errors.register_error_handler` as `{"error": {code, message}}`, plus a
   `details` object when set (e.g. `duplicate_suspected` ships the matched txn).
@@ -151,8 +160,10 @@ channels share). It only switches the active profile when the user explicitly as
 
 **Confirm flow (web and WhatsApp).** Before calling `record_transaction` the
 agent confirms, in one message, the target profile (required when 2+ profiles
-exist), the category/sub-category, and the income/expense type. The tool runs
-only after the user confirms or corrects. If the original message already states
+exist), the category/sub-category, the income/expense type, and — when the
+chosen profile's `prompt_loan` is `true` — whether the expense was paid from
+personal pocket ("I'll mark it as reimbursable"); `loan=true` is set if the
+user says yes. The tool runs only after the user confirms or corrects. If the original message already states
 profile and category unambiguously, the agent may proceed without a round-trip,
 but still reports what it recorded. If the tool comes back flagged as a possible
 duplicate, the agent relays the matched transaction and asks before re-recording
@@ -282,6 +293,7 @@ erDiagram
         text kind "personal|incorporation|other"
         text spreadsheet_id "own Google Sheet"
         text drive_folder_id "own Drive folder"
+        int prompt_loan "0|1 — ask personal-pocket question in chat"
     }
     categories {
         text name "UNIQUE(name, profile_id, parent_id)"
@@ -359,8 +371,9 @@ Migrations are idempotent blocks in `db.init_db()` (added via `PRAGMA
 table_info` checks): `receipt_link`, `loan`, `parent_id` on categories,
 `profile_id` on `imports` (scopes statement imports per profile), `channel` on
 `imports` (`'import'` default; `'chat'` marks chat-originated imports) and on
-`audit_log` (nullable — NULL = global event such as a sync run); legacy
-settings keys migrated then deleted. The profiles migration rebuilds
+`audit_log` (nullable — NULL = global event such as a sync run),
+`prompt_loan` on `profiles` (default 0); legacy settings keys migrated then
+deleted. The profiles migration rebuilds
 `categories` and `tax_profiles` with `UNIQUE(name, profile_id[, parent_id])`
 on a dedicated AUTOCOMMIT connection (see `_migrate_profiles`).
 
@@ -425,3 +438,11 @@ per tick so a `next_run` set far in the past can't back-fill an unbounded burst.
    channel.
 5. **Protected code** — do not change behavior of the files listed in the
    [protected-code table in docs/development.md](development.md#protected-code--do-not-change-behavior).
+
+---
+
+## Related
+
+- [README](../README.md) — features, quickstart, and setup
+- [docs/development.md](development.md) — dev setup, test conventions, and API surface
+- [CONTRIBUTING.md](../CONTRIBUTING.md) — priorities, workflow rules, and PR expectations
