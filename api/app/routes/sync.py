@@ -20,3 +20,10 @@ async def sync_now():
     # status endpoint always reflects the last attempt.
     await asyncio.to_thread(svc._safe_reconcile)
     return svc.status()
+
+
+@router.post("/api/sync/resync")
+async def resync_now():
+    """Full rewrite of the active profile's sheet — fixes ordering and restores deleted rows."""
+    await asyncio.to_thread(svc.resync_active_profile)
+    return svc.status()

@@ -20,6 +20,7 @@ from pathlib import Path
 from googleapiclient.errors import HttpError
 
 from ..db import get_db, get_setting, set_setting
+from ..errors import AppError
 from ..settings_keys import (
     LAST_SYNC_AT, LAST_SYNC_COUNT, LAST_SYNC_ERROR, SHEET_COLUMN_CONFIG,
 )
@@ -437,18 +438,22 @@ def _row_ctx(conn, txn: dict, profile: dict) -> dict:
 
 def _reconcile_tab(conn, sheets, spreadsheet_id: str, tab: str,
                    txns: list, profile: dict, cols: list[dict],
-                   sheet_id: int) -> int:
+                   sheet_id: int, force_full: bool = False) -> int:
     headers = _build_headers(cols)
     last_col = _col_letter(len(headers))
 
-    current = sheets.spreadsheets().values().get(
-        spreadsheetId=spreadsheet_id, range=f"'{tab}'!A1:ZZ2"
-    ).execute().get("values", [])
-    current_header = current[0] if len(current) >= 1 else []
-    totals_present = (len(current) >= 2 and current[1]
-                      and str(current[1][0]) == _TOTALS_LABEL)
+    if not force_full:
+        current = sheets.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id, range=f"'{tab}'!A1:ZZ2"
+        ).execute().get("values", [])
+        current_header = current[0] if len(current) >= 1 else []
+        totals_present = (len(current) >= 2 and current[1]
+                          and str(current[1][0]) == _TOTALS_LABEL)
+        needs_full = current_header != headers or not totals_present
+    else:
+        needs_full = True
 
-    if current_header != headers or not totals_present:
+    if needs_full:
         # First write, column-layout change, OR migrating from an older layout
         # without the frozen top TOTALS row: rewrite the whole tab as
         # [header, TOTALS, *data]. The TOTALS SUM is open-ended so it covers all
@@ -510,7 +515,7 @@ def _reconcile_tab(conn, sheets, spreadsheet_id: str, tab: str,
     return pushed
 
 
-def _reconcile_profile(profile: dict) -> int:
+def _reconcile_profile(profile: dict, force_full: bool = False) -> int:
     """Sync one profile to its Google Sheet. Returns rows pushed."""
     from .transactions import list_transactions
 
@@ -528,7 +533,7 @@ def _reconcile_profile(profile: dict) -> int:
         if SHEET_NAME in tabs:
             return _reconcile_tab(
                 conn, sheets, spreadsheet_id, SHEET_NAME, txns, profile,
-                cols, tabs[SHEET_NAME],
+                cols, tabs[SHEET_NAME], force_full=force_full,
             )
         else:
             txns_by_year: dict[int, list] = defaultdict(list)
@@ -552,6 +557,7 @@ def _reconcile_profile(profile: dict) -> int:
                 pushed += _reconcile_tab(
                     conn, sheets, spreadsheet_id, tab,
                     txns_by_year.get(year, []), profile, cols, sheet_id,
+                    force_full=force_full,
                 )
             _update_summary_tab(sheets, spreadsheet_id, year_tab_titles, cols)
             return pushed
@@ -578,6 +584,35 @@ def reconcile() -> dict:
                 set_setting(conn, f"sync_error_{profile['id']}", str(exc))
 
     return {"synced": total_pushed}
+
+
+def resync_active_profile() -> dict:
+    """Full rewrite of the active profile's sheet. Fixes row ordering and restores deleted rows."""
+    if not sync_enabled():
+        return {"synced": 0, "profile": None, "skipped": "google_not_connected"}
+
+    with get_db() as conn:
+        from .profiles import active_id
+        pid = active_id(conn)
+        row = conn.execute("SELECT * FROM profiles WHERE id=?", (pid,)).fetchone()
+        if row is None:
+            raise AppError("profile_not_found", f"Active profile (id={pid}) not found", 404)
+        profile = dict(row)
+
+    try:
+        pushed = _reconcile_profile(profile, force_full=True)
+        with get_db() as conn:
+            set_setting(conn, f"sync_error_{profile['id']}", None)
+        _record_success({"synced": pushed})
+        return {"synced": pushed, "profile": profile["name"]}
+    except Exception as exc:
+        from .audit import record
+        logger.error("Re-sync failed for profile %s: %s", profile["name"], exc)
+        with get_db() as conn:
+            set_setting(conn, f"sync_error_{profile['id']}", str(exc))
+            set_setting(conn, LAST_SYNC_ERROR, str(exc))
+            record(conn, "sync_failed", channel="sync", detail=str(exc))
+        raise
 
 
 def _slug(text: str) -> str:

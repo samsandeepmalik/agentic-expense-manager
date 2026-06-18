@@ -257,3 +257,50 @@ def test_put_columns_rejects_unknown_keys(client):
     resp = client.put("/api/google/columns",
                       json={"profile_id": 1, "columns": ["merchant", "bogus"]})
     assert resp.status_code == 400
+
+
+# --- force_full / resync -------------------------------------------------
+
+def test_force_full_rewrites_even_when_header_matches(conn, db_path):
+    """force_full=True triggers a full rewrite even when header + TOTALS are intact."""
+    txn = txn_svc.create_transaction(conn, {
+        "date": "2026-06-05", "type": "expense", "category": "Groceries",
+        "total": 10.0})
+    conn.commit()
+    grid: dict = {}
+    p = _reconcile(grid)
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
+        sync.reconcile()
+
+    # Corrupt the data row in-sheet (simulates manual edit / partial delete)
+    grid["2026"][2] = [txn["id"], "CORRUPTED"]
+
+    # Incremental sync skips it (already synced + present in sheet)
+    p2 = _reconcile(grid)
+    with p2[0], p2[1], p2[2], p2[3], p2[4], p2[5]:
+        sync.reconcile()
+    assert grid["2026"][2] == [txn["id"], "CORRUPTED"]  # still corrupted
+
+    # Re-sync with force_full=True rewrites everything
+    p3 = _reconcile(grid)
+    with p3[0], p3[1], p3[2], p3[3], p3[4], p3[5]:
+        sync.resync_active_profile()
+    data_row = next(r for r in grid["2026"][2:] if r and r[0] == txn["id"])
+    assert len(data_row) > 2           # full row restored
+    assert data_row[1] == "2026-06-05" # date column intact
+
+
+def test_resync_active_profile_rewrites_all_including_synced(conn, db_path):
+    """resync_active_profile rewrites all txns regardless of sync_status."""
+    txn_svc.create_transaction(conn, {
+        "date": "2026-06-05", "type": "expense", "category": "Groceries",
+        "total": 15.0})
+    # Mark synced before any sheet exists
+    conn.execute("UPDATE transactions SET sync_status='synced'")
+    conn.commit()
+    grid: dict = {}
+    p = _reconcile(grid)
+    with p[0], p[1], p[2], p[3], p[4], p[5]:
+        sync.resync_active_profile()
+    data_rows = [r for r in grid["2026"][2:] if r and str(r[0]).isdigit()]
+    assert len(data_rows) == 1        # synced txn written via force_full

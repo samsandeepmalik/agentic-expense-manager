@@ -330,6 +330,13 @@ export default function Settings() {
     onError: (e: Error) => setSyncNowError(e.message),
     onSettled: () => invalidate("google"),
   });
+  const [resyncError, setResyncError] = useState<string | null>(null);
+  const resyncNow = useMutation({
+    mutationFn: () => post("/api/sync/resync"),
+    onSuccess: () => { setResyncError(null); invalidate("google"); },
+    onError: (e: Error) => setResyncError(e.message),
+    onSettled: () => invalidate("google"),
+  });
   const [resetSheetError, setResetSheetError] = useState<string | null>(null);
   const resetSheet = useMutation({
     mutationFn: (id: number) => post(`/api/google/profiles/${id}/reset-sheet`),
@@ -407,6 +414,7 @@ export default function Settings() {
   const [jsonError, setJsonError] = useState("");
   const [creds, setCreds] = useState({ id: "", secret: "" });
   const [showTooltip, setShowTooltip] = useState(false);
+  const [showResyncTooltip, setShowResyncTooltip] = useState(false);
   const saveCreds = useMutation({
     mutationFn: (payload: { client_id: string; client_secret: string }) =>
       post("/api/google/credentials", payload),
@@ -981,11 +989,31 @@ export default function Settings() {
                           ? `Never synced · ${google.data.pending} pending`
                           : `Up to date · 0 pending`}
                     </span>
-                    <button className="ghost" disabled={syncNow.isPending}
-                            onClick={() => syncNow.mutate()}>
-                      {syncNow.isPending ? "Syncing…" : "Sync now"}
+                    <button className="ghost" disabled={resyncNow.isPending}
+                            onClick={() => resyncNow.mutate()}>
+                      {resyncNow.isPending ? "Re-syncing…" : "Re-sync now"}
                     </button>
+                    <span style={{ position: "relative" }}>
+                      <span style={{ cursor: "help", fontWeight: "bold", fontSize: 13 }}
+                            onMouseEnter={() => setShowResyncTooltip(true)}
+                            onMouseLeave={() => setShowResyncTooltip(false)}>?</span>
+                      {showResyncTooltip && (
+                        <div className="card" style={{
+                          position: "absolute", top: 24, left: 0, zIndex: 10,
+                          width: 300, padding: 12, fontSize: 13 }}>
+                          <p style={{ margin: "0 0 6px" }}>
+                            <b>Re-sync now</b> — Clears and rewrites the <b>active profile's</b> sheet
+                            from scratch in date order.
+                          </p>
+                          <p style={{ margin: 0 }}>
+                            Use this to restore deleted rows, fix row ordering, or recover
+                            after manual sheet edits. Other profiles are not affected.
+                          </p>
+                        </div>
+                      )}
+                    </span>
                   </div>
+                  {resyncError && <p className="neg" style={{ fontSize: 13 }}>{resyncError}</p>}
                   {syncNowError && <p className="neg" style={{ fontSize: 13 }}>{syncNowError}</p>}
                   {google.data.last_error && (
                     <p className="neg" style={{ fontSize: 13, marginBottom: 6 }}>
