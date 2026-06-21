@@ -82,7 +82,11 @@ async def preview_transaction(body: PreviewIn):
 
 @router.patch("/api/transactions/{txn_id}")
 async def update_transaction(txn_id: int, body: TransactionPatch):
-    changes = {k: v for k, v in body.model_dump().items() if v is not None}
+    # exclude_unset=True: only fields the client explicitly sent are included,
+    # so an explicit null clears the value (e.g. receipt_link: null removes the
+    # link) while omitted fields are left unchanged. The old "if v is not None"
+    # filter silently dropped null, making it impossible to clear receipt_link.
+    changes = body.model_dump(exclude_unset=True)
     with get_db() as conn:
         return svc.update_transaction(conn, txn_id, changes)
 

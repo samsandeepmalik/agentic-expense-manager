@@ -208,6 +208,15 @@ def approve_import(import_id: int, indexes: list[int] | None,
         with get_db() as conn:
             conn.execute("UPDATE imports SET rows=? WHERE id=?",
                          (json.dumps(rows), import_id))
+    # Keys the review grid is permitted to supply. profile_id, source, and
+    # external_ref are always taken from the import record and the loop index
+    # below — client-supplied values for these fields are silently ignored to
+    # prevent cross-profile data injection and audit channel spoofing.
+    _ALLOWED_ROW_KEYS = frozenset({
+        "date", "type", "category", "category_id", "merchant",
+        "description", "notes", "total", "loan", "receipt_link", "skip",
+        "duplicate",
+    })
     created = 0
     failed: list[dict] = []
     with get_db() as conn:
@@ -219,7 +228,9 @@ def approve_import(import_id: int, indexes: list[int] | None,
             # ambiguous category) must not roll back the whole batch. Skip it,
             # report it, and let the good rows import.
             try:
-                row_data = dict(row)
+                # Whitelist: only carry forward user-editable fields; server
+                # controls profile_id, source, and external_ref.
+                row_data = {k: v for k, v in row.items() if k in _ALLOWED_ROW_KEYS}
                 if not row_data.get("receipt_link") and record.get("source_link"):
                     row_data["receipt_link"] = record["source_link"]
                 txn_svc.create_transaction(conn, row_data | {

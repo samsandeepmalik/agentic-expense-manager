@@ -28,21 +28,28 @@ _STATEMENT_EXT = (".csv", ".xlsx", ".xls", ".pdf")
 
 async def _try_upload_import_source(import_id: int, filename: str,
                                     data: bytes, content_type: str | None) -> None:
-    """Upload source file to Drive and store link on import. Silent on failure."""
+    """Upload source file to Drive (private) and store link on import.
+
+    The file is NOT made world-readable — statement source files contain
+    sensitive financial data (account numbers, full transaction history) and
+    do not need to be accessible via an anonymous link. Failures are logged at
+    WARNING level and swallowed so the import flow is not interrupted.
+    """
     def _upload() -> None:
         import_record = imports_svc.get_import(import_id)
         with get_db() as conn:
             profile = prof_svc.get_profile(conn, import_record["profile_id"])
         mime = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
         result = gc.upload_receipt_image(
-            filename, data, mime, profile=profile, date=date.today().isoformat())
+            filename, data, mime, profile=profile, date=date.today().isoformat(),
+            public=False)
         link = result["link"] if isinstance(result, dict) else result
         imports_svc.set_source_link(import_id, link)
 
     try:
         await asyncio.to_thread(_upload)
     except Exception:
-        logger.debug("Drive upload skipped for import %s", import_id, exc_info=True)
+        logger.warning("Drive upload failed for import %s", import_id, exc_info=True)
 
 
 def _sse(payload: dict) -> str:
@@ -96,12 +103,17 @@ async def send_message(session_id: str, message: str = Form(""),
                 yield _sse({"type": "status", "text": "Reading statement…"})
                 result = await imports_svc.classify_and_start(filename, data)
                 if result["kind"] == "statement":
+                    yield _sse({"type": "status", "text": "Uploading to Drive…"})
                     await _try_upload_import_source(
                         result["import_id"], filename, data, content_type)
-                    prompt = (f"{message}\n\n[The user uploaded the statement "
-                              f"'{filename}'. It was parsed as import "
-                              f"#{result['import_id']}. Review it with "
-                              f"get_import_summary and follow the import flow.]")
+                    # Do NOT embed the raw filename in the prompt — it is a
+                    # client-supplied multipart field and could contain prompt
+                    # injection payloads. The import_id is sufficient for the
+                    # agent to call get_import_summary and proceed.
+                    prompt = (f"{message}\n\n[A statement file was uploaded and "
+                              f"parsed as import #{result['import_id']}. "
+                              f"Review it with get_import_summary and follow "
+                              f"the import flow.]")
                 elif result["kind"] == "failed":
                     yield _sse({"type": "done",
                                 "text": "I couldn't read that statement. "
