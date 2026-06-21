@@ -365,19 +365,17 @@ def ensure_year_folder(profile: dict, year: int) -> str:
 
 def upload_receipt_image(filename: str, data: bytes, mime_type: str,
                          profile: dict, date: str = "",
-                         public: bool = True) -> dict:
+                         public: bool = False) -> dict:
     """Upload a file to the profile's Drive year subfolder; return {"link","name"}.
 
     "name" is the file name created in Drive so callers can show a readable
     receipt label alongside the shareable link.
 
-    public=True (default): sets an anyone/reader permission so the link works
-    in the Google Sheet receipt column without requiring the viewer to be signed
-    in. Use for individual receipt images.
+    public=False (default): the file is accessible only to the authenticated
+    Drive owner via webViewLink. No public permission is granted.
 
-    public=False: skips the public permission. The file is accessible only to
-    the authenticated Drive owner. Use for statement source files (CSV/XLSX/PDF)
-    which contain sensitive financial data and do not need anonymous access.
+    public=True: kept for backward compatibility only; sets an anyone/reader
+    permission. Not used by any current call path.
     """
     year = int(date[:4]) if date and len(date) >= 4 else datetime.now().year
     drive = drive_service()
@@ -395,7 +393,7 @@ def upload_receipt_image(filename: str, data: bytes, mime_type: str,
                 .execute()
             )
             if public:
-                # Anyone with the link can view so sheet links work anywhere.
+                # Retained for back-compat; not called by any current path.
                 drive.permissions().create(
                     fileId=created["id"], body={"type": "anyone", "role": "reader"}
                 ).execute()

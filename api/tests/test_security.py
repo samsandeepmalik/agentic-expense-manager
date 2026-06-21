@@ -85,3 +85,44 @@ def test_chat_upload_too_large_returns_413(db_path):
         files={"file": ("big.pdf", BytesIO(big_data), "application/pdf")},
     )
     assert resp.status_code == 413
+
+
+# ---- Drive public permission removal ----
+
+def test_upload_receipt_does_not_grant_public_permission(monkeypatch):
+    """upload_receipt_image must NOT call permissions().create() with type=anyone."""
+    granted_permissions = []
+
+    class FakePermissions:
+        def create(self, fileId, body):
+            granted_permissions.append(body)
+            class _Exec:
+                def execute(self_): return {}
+            return _Exec()
+
+    class FakeFiles:
+        def create(self, body, media_body=None, fields=None):
+            class _Exec:
+                def execute(self_):
+                    return {"id": "fake-id", "webViewLink": "https://drive.google.com/fake", "name": "receipt.jpg"}
+            return _Exec()
+
+        def list(self, q=None, fields=None, pageSize=None):
+            class _Exec:
+                def execute(self_): return {"files": [{"id": "folder-id"}]}
+            return _Exec()
+
+    class FakeDrive:
+        def files(self): return FakeFiles()
+        def permissions(self): return FakePermissions()
+
+    import app.services.google_client as gc
+    monkeypatch.setattr(gc, "drive_service", lambda: FakeDrive())
+    monkeypatch.setattr(gc, "_read", lambda key: "cached-folder-id" if "year" not in str(key) else {"1:2026": "folder-id"})
+    monkeypatch.setattr(gc, "_write", lambda key, val: None)
+
+    result = gc.upload_receipt_image("receipt.jpg", b"data", "image/jpeg",
+                                      {"id": 1, "name": "Personal"}, "2026-01-01")
+    assert result["link"] == "https://drive.google.com/fake"
+    assert not any(p.get("type") == "anyone" for p in granted_permissions), \
+        "upload_receipt_image must not grant public 'anyone' permission"

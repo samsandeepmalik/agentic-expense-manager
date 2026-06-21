@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Query
 from fastapi.responses import FileResponse, PlainTextResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..db import get_db
 from ..errors import AppError
@@ -40,7 +40,15 @@ class TransactionPatch(BaseModel):
     description: str | None = None
     notes: str | None = None
     loan: bool | None = None
-    receipt_link: str | None = None
+    receipt_link: str | None = None  # explicitly nullable — null clears the link
+
+    @field_validator("date", "type", "total", "merchant", "description", "notes",
+                     mode="before")
+    @classmethod
+    def reject_explicit_null(cls, v: object, info) -> object:
+        if v is None:
+            raise ValueError(f"{info.field_name} cannot be set to null")
+        return v
 
 
 class PreviewIn(BaseModel):

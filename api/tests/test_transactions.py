@@ -363,3 +363,44 @@ def test_patch_route_explicit_null_receipt_link_clears_it(db_path):
                          json={"merchant": "Walmart"})
     assert resp2.status_code == 200
     assert resp2.json()["receipt_link"] is None   # still null, not restored
+
+
+# ---------------------------------------------------------------------------
+# TransactionPatch non-nullable field validators
+# ---------------------------------------------------------------------------
+
+def _patch_client(db_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import app.routes.transactions as txn_routes
+    application = FastAPI()
+    application.include_router(txn_routes.router)
+    return TestClient(application)
+
+
+@pytest.mark.parametrize("field", ["date", "type", "total", "merchant",
+                                   "description", "notes"])
+def test_patch_route_rejects_explicit_null_for_non_nullable_fields(db_path, field):
+    """Sending null for a non-nullable field returns 422, never writes to DB."""
+    client = _patch_client(db_path)
+    from app.db import get_db
+    with get_db() as conn:
+        txn = svc.create_transaction(conn, {
+            "date": "2026-06-05", "type": "expense", "category": "Groceries",
+            "total": 20.0})
+    resp = client.patch(f"/api/transactions/{txn['id']}", json={field: None})
+    assert resp.status_code == 422, (
+        f"Expected 422 for {field}=null but got {resp.status_code}: {resp.text}")
+
+
+def test_patch_route_loan_null_treated_as_false(db_path):
+    """loan=null is coerced to false by bool(None) — not a validation error."""
+    client = _patch_client(db_path)
+    from app.db import get_db
+    with get_db() as conn:
+        txn = svc.create_transaction(conn, {
+            "date": "2026-06-05", "type": "expense", "category": "Groceries",
+            "total": 20.0, "loan": True})
+    resp = client.patch(f"/api/transactions/{txn['id']}", json={"loan": None})
+    assert resp.status_code == 200
+    assert resp.json()["loan"] is False  # None → bool(None) → False
