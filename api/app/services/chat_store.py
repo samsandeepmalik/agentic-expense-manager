@@ -62,6 +62,12 @@ def add_message(conn, session_id: str, role: str, content: dict) -> None:
                  (session_id,))
 
 
-def list_messages(conn, session_id: str) -> list[dict]:
+def list_messages(conn, session_id: str, limit: int | None = None) -> list[dict]:
+    if limit is not None:
+        rows = conn.execute(
+            "SELECT * FROM chat_messages WHERE session_id=? ORDER BY id DESC LIMIT ?",
+            (session_id, limit),
+        ).fetchall()
+        return [dict(r) | {"content": json.loads(r["content"])} for r in reversed(rows)]
     return [dict(r) | {"content": json.loads(r["content"])} for r in conn.execute(
         "SELECT * FROM chat_messages WHERE session_id=? ORDER BY id", (session_id,))]

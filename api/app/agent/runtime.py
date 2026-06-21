@@ -73,7 +73,7 @@ class Session:
         from ..services import chat_store
         with get_db() as conn:
             chat_store.ensure_session(conn, session_id, channel)
-            for message in chat_store.list_messages(conn, session_id):
+            for message in chat_store.list_messages(conn, session_id, limit=30):
                 text = message["content"].get("text", "")
                 if not text:
                     continue

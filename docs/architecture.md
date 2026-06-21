@@ -125,9 +125,11 @@ implement the protocol, append to `main.CHANNELS`.
 
 ## Agent runtime
 
-- `agent/runtime.Session`: one pi-agent `Agent` per chat session; history
-  replayed from `chat_store` on construction (survives restarts); streams
-  normalized events (`delta / tool / ui / done`) to the SSE route.
+- `agent/runtime.Session`: one pi-agent `Agent` per chat session; last 30
+  messages (15 pairs) replayed from `chat_store` on construction (survives
+  restarts); streams normalized events (`delta / tool / ui / done`) to the SSE
+  route. Full message history is still stored and returned to the UI; the limit
+  applies only to the agent's context window.
 - `agent/anthropic_provider.py`: Anthropic Messages API with Claude Max OAuth
   (`Bearer` + `anthropic-beta: oauth-2025-04-20` + mandatory Claude Code
   system block) or `x-api-key` fallback. **Protected — verified live.**
@@ -165,9 +167,11 @@ chosen profile's `prompt_loan` is `true` — whether the expense was paid from
 personal pocket ("I'll mark it as reimbursable"); `loan=true` is set if the
 user says yes. The tool runs only after the user confirms or corrects. If the original message already states
 profile and category unambiguously, the agent may proceed without a round-trip,
-but still reports what it recorded. If the tool comes back flagged as a possible
-duplicate, the agent relays the matched transaction and asks before re-recording
-(see Duplicate detection).
+but still reports what it recorded, always citing the transaction ID as `#<id>`
+from the tool result. If the tool returns `{"error": ...}` the agent reports
+failure — never claims success without a real ID. If the tool comes back flagged
+as a possible duplicate, the agent relays the matched transaction and asks before
+re-recording (see Duplicate detection).
 
 **Chat statement import (web only).** When a CSV/XLSX/PDF is uploaded in web chat,
 `imports.classify_and_start` decides receipt vs statement (spreadsheets are always
