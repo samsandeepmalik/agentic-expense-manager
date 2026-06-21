@@ -40,6 +40,7 @@ class TransactionPatch(BaseModel):
     description: str | None = None
     notes: str | None = None
     loan: bool | None = None
+    receipt_link: str | None = None
 
 
 class PreviewIn(BaseModel):

@@ -182,12 +182,13 @@ def update_transaction(conn, txn_id: int, changes: dict,
     conn.execute(
         """UPDATE transactions SET date=?, type=?, category_id=?, description=?,
            notes=?, merchant=?, amount=?, tax_breakdown=?, total=?, counted=?, loan=?,
-           sync_status='pending', updated_at=datetime('now') WHERE id=?""",
+           receipt_link=?, sync_status='pending', updated_at=datetime('now') WHERE id=?""",
         (merged["date"], merged["type"], merged["category_id"], merged["description"],
          merged.get("notes", ""),
          merged["merchant"], parts["amount"], json.dumps(parts["breakdown"]),
          round(float(merged["total"]), 2), parts["counted"],
-         int(bool(merged.get("loan", False))), txn_id),
+         int(bool(merged.get("loan", False))),
+         merged.get("receipt_link"), txn_id),
     )
     result = get_transaction(conn, txn_id, pid)
     audit.record(conn, "transaction_updated", channel=result["source"],
