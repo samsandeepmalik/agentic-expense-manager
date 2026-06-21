@@ -252,3 +252,123 @@ def test_oauth_callback_rejects_invalid_state(db_path, fresh_app_client):
 def test_oauth_callback_missing_state_returns_400(db_path, fresh_app_client):
     resp = fresh_app_client.get("/api/google/callback?code=fake-code")
     assert resp.status_code == 400
+
+
+# ---- receipt_link URL scheme validation ----
+
+def test_create_transaction_rejects_non_http_receipt_link(conn):
+    from app.services import transactions as txn_svc, categories as cat_svc
+    cat = cat_svc.upsert_category(conn, "Other", "expense", 100, True, None, 0, 1)
+    import pytest
+    with pytest.raises(Exception) as exc_info:
+        txn_svc.create_transaction(conn, {
+            "date": "2026-01-01", "type": "expense",
+            "category_id": cat["id"], "merchant": "Test",
+            "total": 10.0, "receipt_link": "javascript:alert(1)",
+        })
+    assert "receipt_link" in str(exc_info.value).lower() or \
+           hasattr(exc_info.value, "code") and "receipt_link" in exc_info.value.code
+
+
+def test_create_transaction_accepts_https_receipt_link(conn):
+    from app.services import transactions as txn_svc, categories as cat_svc
+    cat = cat_svc.upsert_category(conn, "Other2", "expense", 100, True, None, 0, 1)
+    txn = txn_svc.create_transaction(conn, {
+        "date": "2026-01-01", "type": "expense",
+        "category_id": cat["id"], "merchant": "Test",
+        "total": 10.0, "receipt_link": "https://drive.google.com/file/d/abc",
+    })
+    assert txn["receipt_link"] == "https://drive.google.com/file/d/abc"
+
+
+def test_update_transaction_rejects_non_http_receipt_link(conn):
+    from app.services import transactions as txn_svc, categories as cat_svc
+    import pytest
+    cat = cat_svc.upsert_category(conn, "Other3", "expense", 100, True, None, 0, 1)
+    txn = txn_svc.create_transaction(conn, {
+        "date": "2026-01-01", "type": "expense",
+        "category_id": cat["id"], "merchant": "Test", "total": 10.0,
+    })
+    with pytest.raises(Exception) as exc_info:
+        txn_svc.update_transaction(conn, txn["id"],
+                                   {"receipt_link": "file:///etc/passwd"})
+    assert "receipt_link" in str(exc_info.value).lower() or \
+           hasattr(exc_info.value, "code") and "receipt_link" in exc_info.value.code
+
+
+# ---- CORS headers ----
+
+def test_cors_allows_x_api_key_header(fresh_app_client):
+    """Preflight must include X-Api-Key in Access-Control-Allow-Headers."""
+    resp = fresh_app_client.options(
+        "/api/transactions",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-Api-Key",
+        },
+    )
+    # FastAPI returns 200 for OPTIONS preflight
+    allow_headers = resp.headers.get("access-control-allow-headers", "")
+    assert "x-api-key" in allow_headers.lower(), \
+        f"X-Api-Key not in Access-Control-Allow-Headers: {allow_headers!r}"
+
+
+# ---- MIME type validation ----
+
+def test_import_rejects_disallowed_extension(fresh_app_client):
+    from io import BytesIO
+    resp = fresh_app_client.post(
+        "/api/imports",
+        files={"file": ("malware.exe", BytesIO(b"MZ\x90\x00"), "application/octet-stream")},
+    )
+    assert resp.status_code == 415
+
+
+def test_import_accepts_csv(fresh_app_client):
+    from io import BytesIO
+    resp = fresh_app_client.post(
+        "/api/imports",
+        files={"file": ("statement.csv", BytesIO(b"date,amount\n2026-01-01,10\n"), "text/csv")},
+    )
+    # 200 or 422 (parse failure) — both mean MIME check passed
+    assert resp.status_code in (200, 202, 422, 500)
+
+
+def test_mime_check_statement_raises_on_bad_extension():
+    from app.services.mime_check import check_statement
+    from app.errors import AppError
+    import pytest
+    with pytest.raises(AppError) as exc_info:
+        check_statement("payload.php", "application/x-httpd-php")
+    assert exc_info.value.status == 415
+
+
+def test_mime_check_statement_accepts_csv():
+    from app.services.mime_check import check_statement
+    check_statement("bank.csv", "text/csv")  # must not raise
+
+
+def test_mime_check_statement_accepts_xlsx():
+    from app.services.mime_check import check_statement
+    check_statement("export.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+def test_mime_check_receipt_raises_on_bad_extension():
+    from app.services.mime_check import check_receipt
+    from app.errors import AppError
+    import pytest
+    with pytest.raises(AppError) as exc_info:
+        check_receipt("script.js", "application/javascript")
+    assert exc_info.value.status == 415
+
+
+def test_mime_check_receipt_accepts_jpeg():
+    from app.services.mime_check import check_receipt
+    check_receipt("photo.jpg", "image/jpeg")  # must not raise
+
+
+def test_mime_check_receipt_accepts_pdf():
+    from app.services.mime_check import check_receipt
+    check_receipt("receipt.pdf", "application/pdf")  # must not raise

@@ -16,6 +16,19 @@ from . import profiles as prof_svc
 from . import tax as tax_svc
 
 
+def _validate_receipt_link(url: str | None) -> None:
+    """Reject receipt_link values that aren't http/https URLs."""
+    if url is None:
+        return
+    lower = url.strip().lower()
+    if lower and not lower.startswith(("https://", "http://")):
+        raise AppError(
+            "invalid_receipt_link",
+            "receipt_link must be an http:// or https:// URL",
+            400,
+        )
+
+
 def _request_sync() -> None:
     """Mark data dirty for the background Google sync worker (lazy import —
     sync imports this module)."""
@@ -82,6 +95,7 @@ def create_transaction(conn: sqlite3.Connection, data: dict, *,
                     "id": m["id"], "date": m["date"], "merchant": m["merchant"],
                     "total": m["total"]}},
             )
+    _validate_receipt_link(data.get("receipt_link"))
     category = _resolve_category(conn, data, pid)
     if data["type"] not in ("income", "expense"):
         raise AppError("invalid_type", "type must be income or expense")
@@ -168,6 +182,8 @@ def update_transaction(conn, txn_id: int, changes: dict,
     if "date" in changes and not str(changes.get("date", "")).strip():
         raise AppError("invalid_date", "Transaction date is required", 400)
     merged = current | changes
+    if "receipt_link" in changes:
+        _validate_receipt_link(changes.get("receipt_link"))
     pid = current["profile_id"]
     if "category_id" in changes or "category" in changes:
         category = _resolve_category(conn, changes, pid)

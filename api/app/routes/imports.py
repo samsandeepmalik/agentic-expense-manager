@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from ..errors import AppError
 from ..services import imports as svc
+from ..services import mime_check
 from ..services import receipts as receipts_svc
 
 router = APIRouter()
@@ -22,6 +23,7 @@ class ApproveIn(BaseModel):
 @router.post("/api/imports")
 async def upload(file: UploadFile = File(...),
                  profile_id: int | None = Form(None)):
+    mime_check.check_statement(file.filename or "", file.content_type)
     data = await file.read()
     if len(data) > _MAX_UPLOAD_BYTES:
         raise AppError("file_too_large",

@@ -17,6 +17,7 @@ from ..errors import AppError
 from ..services import chat_store
 from ..services import google_client as gc
 from ..services import imports as imports_svc
+from ..services import mime_check
 from ..services import profiles as prof_svc
 from ..services.receipts import build_receipt_prompt
 
@@ -102,6 +103,12 @@ async def send_message(session_id: str, message: str = Form(""),
         raise AppError("file_too_large",
                        f"Upload exceeds the 20 MB limit ({len(data) // 1024 // 1024} MB received)",
                        413)
+    if data is not None and filename:
+        if is_image or _is_statement(filename):
+            if is_image:
+                mime_check.check_receipt(filename, content_type)
+            else:
+                mime_check.check_statement(filename, content_type)
 
     async def stream():
         try:
