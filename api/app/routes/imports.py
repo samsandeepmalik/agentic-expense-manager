@@ -5,10 +5,13 @@ import asyncio
 from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel
 
+from ..errors import AppError
 from ..services import imports as svc
 from ..services import receipts as receipts_svc
 
 router = APIRouter()
+
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
 class ApproveIn(BaseModel):
@@ -20,6 +23,10 @@ class ApproveIn(BaseModel):
 async def upload(file: UploadFile = File(...),
                  profile_id: int | None = Form(None)):
     data = await file.read()
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise AppError("file_too_large",
+                       f"Upload exceeds the 20 MB limit ({len(data) // 1024 // 1024} MB received)",
+                       413)
     return await svc.start_import(file.filename or "upload", data, profile_id)
 
 

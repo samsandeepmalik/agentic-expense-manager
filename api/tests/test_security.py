@@ -56,3 +56,32 @@ def test_no_api_key_configured_allows_all(db_path, monkeypatch):
     client = TestClient(main_mod.app)
     resp = client.get("/api/transactions")
     assert resp.status_code == 200
+
+
+# ---- Upload size limits ----
+
+def test_import_upload_too_large_returns_413(db_path):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    big_data = b"date,amount,merchant\n" + b"2026-01-01,10.00,A\n" * 1_200_000  # ~21 MB
+    from io import BytesIO
+    resp = client.post(
+        "/api/imports",
+        files={"file": ("big.csv", BytesIO(big_data), "text/csv")},
+    )
+    assert resp.status_code == 413
+
+
+def test_chat_upload_too_large_returns_413(db_path):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    big_data = b"x" * (21 * 1024 * 1024)  # 21 MB
+    from io import BytesIO
+    resp = client.post(
+        "/api/chat/sessions/ui:testsession/messages",
+        data={"message": "hi"},
+        files={"file": ("big.pdf", BytesIO(big_data), "application/pdf")},
+    )
+    assert resp.status_code == 413

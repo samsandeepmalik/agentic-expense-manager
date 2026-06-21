@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 
 from ..agent.runtime import sessions
 from ..db import get_db
+from ..errors import AppError
 from ..services import chat_store
 from ..services import google_client as gc
 from ..services import imports as imports_svc
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _STATEMENT_EXT = (".csv", ".xlsx", ".xls", ".pdf")
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
 async def _try_upload_import_source(import_id: int, filename: str,
@@ -95,6 +97,11 @@ async def send_message(session_id: str, message: str = Form(""),
     filename = file.filename if file is not None else None
     content_type = file.content_type if file is not None else None
     is_image = bool(content_type and content_type.startswith("image/"))
+
+    if data is not None and len(data) > _MAX_UPLOAD_BYTES:
+        raise AppError("file_too_large",
+                       f"Upload exceeds the 20 MB limit ({len(data) // 1024 // 1024} MB received)",
+                       413)
 
     async def stream():
         try:

@@ -32,12 +32,26 @@ CHANNELS: list[BaseChannelRegistry] = [whatsapp]
 
 _api_key_header = APIKeyHeader(name="X-Api-Key", auto_error=False)
 
+# 20 MB hard cap on all uploads (import CSV/XLSX/PDF, chat file attachment)
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+
 
 async def verify_api_key(request: Request,
                          key: str | None = Security(_api_key_header)) -> None:
-    """Enforce X-Api-Key when API_KEY env var is set. Open when it is empty."""
+    """Enforce X-Api-Key and upload-size limits on every request.
+
+    - Health probe is always allowed (no auth, no size check).
+    - When API_KEY env var is set, every other route requires a matching
+      X-Api-Key header; returns 401 otherwise (open dev mode when unset).
+    - Content-Length > 20 MB → 413 before the body is read.
+    """
     if request.url.path == "/api/health":
         return
+    # Reject oversized uploads early via Content-Length (avoids reading body)
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413,
+                            detail=f"Upload too large (max {_MAX_UPLOAD_BYTES // 1024 // 1024} MB)")
     required = config.api_key
     if required and key != required:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
