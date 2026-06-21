@@ -104,11 +104,15 @@ async def send_message(session_id: str, message: str = Form(""),
                        f"Upload exceeds the 20 MB limit ({len(data) // 1024 // 1024} MB received)",
                        413)
     if data is not None and filename:
-        if is_image or _is_statement(filename):
-            if is_image:
-                mime_check.check_receipt(filename, content_type)
-            else:
-                mime_check.check_statement(filename, content_type)
+        if is_image:
+            mime_check.check_receipt(filename, content_type)
+        elif _is_statement(filename):
+            mime_check.check_statement(filename, content_type)
+        else:
+            # Non-image, non-statement: treated as a receipt (e.g. single-page
+            # PDF that classify_and_start routes to build_receipt_prompt).
+            # Still gate on allowed receipt extensions/MIME to block .exe etc.
+            mime_check.check_receipt(filename, content_type)
 
     async def stream():
         try:

@@ -95,8 +95,8 @@ def create_transaction(conn: sqlite3.Connection, data: dict, *,
                     "id": m["id"], "date": m["date"], "merchant": m["merchant"],
                     "total": m["total"]}},
             )
-    _validate_receipt_link(data.get("receipt_link"))
     category = _resolve_category(conn, data, pid)
+    _validate_receipt_link(data.get("receipt_link"))
     if data["type"] not in ("income", "expense"):
         raise AppError("invalid_type", "type must be income or expense")
     total = round(float(data["total"]), 2)
