@@ -135,9 +135,15 @@ def _make_fake_drive(monkeypatch):
         def permissions(self): return FakePermissions()
 
     monkeypatch.setattr(gc, "drive_service", lambda: FakeDrive())
-    # Return a folder-id string for all cache reads so _get_or_create_folder
-    # skips the "create" branch and goes straight to the upload + permission path.
-    monkeypatch.setattr(gc, "_read", lambda key: "cached-folder-id")
+    # DRIVE_YEAR_FOLDERS must return a dict so ensure_year_folder can do
+    # cache[key] = folder_id without a TypeError.  Pre-populate the
+    # "1:2026" key so the lookup short-circuits immediately and returns the
+    # folder id without touching ensure_drive_folder (which needs real OAuth).
+    monkeypatch.setattr(
+        gc, "_read",
+        lambda key: {"1:2026": "cached-folder-id"}
+        if key == gc.DRIVE_YEAR_FOLDERS else "cached-value",
+    )
     monkeypatch.setattr(gc, "_write", lambda key, val: None)
     return gc, granted_permissions
 
