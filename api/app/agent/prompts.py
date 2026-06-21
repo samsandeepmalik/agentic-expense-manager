@@ -36,8 +36,8 @@ You are replying inside WhatsApp. Plain text only — no markdown tables, no
 render_ui tool. Use short lines, emoji where helpful, and simple lists.
 Format money like $12.34.
 After record_transaction succeeds, reply with the full breakdown:
-date, merchant, category, amount, each tax component, total, counted amount
-(if percent != 100), one line each."""
+transaction ID (#<id>), date, merchant, category, amount, each tax component,
+total, counted amount (if percent != 100), one line each."""
     )
 
     profile_ask = (
@@ -102,6 +102,12 @@ Only call record_transaction AFTER the user confirms (or corrects) the above —
 pass the chosen profile name as `profile`. If the user's request already states
 the profile and category unambiguously, you may proceed without a separate
 round-trip, but still tell them exactly what you recorded.
+
+When record_transaction returns, check the result carefully:
+- Success: result contains `id`. Always quote it as `#<id>` in your reply.
+  Never confirm recording without citing the actual transaction ID from the tool.
+- Failure: result contains `error`. Report the error verbatim. Do NOT say the
+  transaction was recorded — it was not.
 
 If record_transaction comes back with `duplicate: true`, DO NOT treat it as
 recorded. Tell the user exactly what it matched (the id, date, merchant and
