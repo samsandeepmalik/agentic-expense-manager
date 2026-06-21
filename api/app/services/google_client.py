@@ -8,6 +8,7 @@ SQLite settings table.
 from __future__ import annotations
 
 import io
+import secrets
 from datetime import datetime
 from typing import Any
 
@@ -27,6 +28,7 @@ from ..settings_keys import (
     DRIVE_YEAR_FOLDERS,
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
+    GOOGLE_OAUTH_STATE,
     GOOGLE_PKCE_VERIFIER,
     GOOGLE_TOKENS,
 )
@@ -126,9 +128,11 @@ def _client_config() -> dict[str, Any]:
 def build_auth_url() -> str:
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES)
     flow.redirect_uri = config.google_redirect_uri
-    url, _state = flow.authorization_url(
-        access_type="offline", prompt="consent"
+    state = secrets.token_urlsafe(32)
+    url, _returned_state = flow.authorization_url(
+        access_type="offline", prompt="consent", state=state
     )
+    _write(GOOGLE_OAUTH_STATE, state)
     # Desktop app credentials trigger PKCE automatically; persist verifier so
     # exchange_code (a separate request) can complete the handshake.
     if flow.code_verifier:
@@ -136,7 +140,13 @@ def build_auth_url() -> str:
     return url
 
 
-def exchange_code(code: str) -> None:
+def exchange_code(code: str, state: str) -> None:
+    stored_state = _read(GOOGLE_OAUTH_STATE)
+    if not stored_state or state != stored_state:
+        raise AppError("invalid_oauth_state",
+                       "OAuth state mismatch — possible CSRF attack. "
+                       "Please start the Google auth flow again.", 400)
+    _write(GOOGLE_OAUTH_STATE, None)
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES)
     flow.redirect_uri = config.google_redirect_uri
     verifier = _read(GOOGLE_PKCE_VERIFIER)

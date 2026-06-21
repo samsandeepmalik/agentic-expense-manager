@@ -173,8 +173,12 @@ async def auth():
 
 
 @router.get("/api/google/callback")
-async def callback(code: str):
-    await asyncio.to_thread(gc.exchange_code, code)
+async def callback(code: str, state: str | None = None):
+    if not state:
+        from ..errors import AppError
+        raise AppError("invalid_oauth_state",
+                       "Missing OAuth state parameter — please restart the Google auth flow.", 400)
+    await asyncio.to_thread(gc.exchange_code, code, state)
     from ..services import sync
     await asyncio.to_thread(sync._safe_reconcile)
     return RedirectResponse(f"{config.web_origin}/settings?google=connected")

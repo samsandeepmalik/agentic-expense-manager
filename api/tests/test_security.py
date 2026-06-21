@@ -233,3 +233,22 @@ def test_receipt_inside_data_dir_is_served(conn, db_path, monkeypatch, fresh_app
 
     resp = fresh_app_client.get(f"/api/receipts/{txn_id}")
     assert resp.status_code == 200
+
+
+# ---- Google OAuth CSRF state ----
+
+def test_oauth_callback_rejects_invalid_state(db_path, fresh_app_client):
+    """Callback with wrong state must return 400, not proceed with token exchange."""
+    import app.db as db_mod
+
+    # Seed a stored state
+    with db_mod.get_db() as conn:
+        db_mod.set_setting(conn, "google_oauth_state", "correct-state-value")
+
+    resp = fresh_app_client.get("/api/google/callback?code=fake-code&state=wrong-state")
+    assert resp.status_code == 400
+
+
+def test_oauth_callback_missing_state_returns_400(db_path, fresh_app_client):
+    resp = fresh_app_client.get("/api/google/callback?code=fake-code")
+    assert resp.status_code == 400
