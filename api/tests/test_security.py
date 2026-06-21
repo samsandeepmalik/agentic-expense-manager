@@ -166,21 +166,21 @@ def test_statement_upload_does_not_grant_public_permission(monkeypatch):
         "public=False must not grant anyone/reader permission"
 
 
-def test_receipt_upload_grants_public_permission(monkeypatch):
-    """public=True (default for receipt images) MUST call
-    permissions().create(type='anyone', role='reader') so the Google Sheets
-    receipt link is accessible without a Google login.
+def test_receipt_upload_public_true_raises():
+    """public=True must raise ValueError — all uploads are now private.
+
+    The public=True path was removed as a security fix (it granted anonymous
+    Drive read access to financial documents). Passing public=True is now an
+    explicit error so accidental re-enablement is loud rather than silent.
     """
-    gc, granted = _make_fake_drive(monkeypatch)
-    result = gc.upload_receipt_image(
-        "receipt.jpg", b"\xff\xd8\xff\xe0", "image/jpeg",
-        {"id": 1, "name": "Personal"}, "2026-01-01",
-        public=True,
-    )
-    assert result["link"] == "https://drive.google.com/fake"
-    assert any(p.get("type") == "anyone" and p.get("role") == "reader"
-               for p in granted), \
-        "public=True must grant anyone/reader permission for Sheet links"
+    import pytest
+    import app.services.google_client as gc
+    with pytest.raises(ValueError, match="public=True is not permitted"):
+        gc.upload_receipt_image(
+            "receipt.jpg", b"\xff\xd8\xff\xe0", "image/jpeg",
+            {"id": 1, "name": "Personal"}, "2026-01-01",
+            public=True,
+        )
 
 
 # ---- image_path path confinement ----

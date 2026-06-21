@@ -136,11 +136,14 @@ def _seed_default_profile(conn) -> None:
         return
     conn.execute(
         "INSERT INTO profiles(id, name, kind) VALUES (1, 'Personal', 'personal')")
-    for key in ("spreadsheet_id", "drive_folder_id"):
-        row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    for col in ("spreadsheet_id", "drive_folder_id"):
+        row = conn.execute("SELECT value FROM settings WHERE key=?", (col,)).fetchone()
         if row:
-            conn.execute(f"UPDATE profiles SET {key}=? WHERE id=1",
-                         (json.loads(row["value"]),))
+            val = json.loads(row["value"])
+            if col == "spreadsheet_id":
+                conn.execute("UPDATE profiles SET spreadsheet_id=? WHERE id=1", (val,))
+            else:
+                conn.execute("UPDATE profiles SET drive_folder_id=? WHERE id=1", (val,))
 
 
 def init_db() -> None:

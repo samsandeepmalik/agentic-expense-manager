@@ -381,12 +381,17 @@ def upload_receipt_image(filename: str, data: bytes, mime_type: str,
     "name" is the file name created in Drive so callers can show a readable
     receipt label alongside the shareable link.
 
-    public=False (default): the file is accessible only to the authenticated
-    Drive owner via webViewLink. No public permission is granted.
-
-    public=True: kept for backward compatibility only; sets an anyone/reader
-    permission. Not used by any current call path.
+    All uploads are private: files are accessible only to the authenticated
+    Drive owner via webViewLink. The `public` parameter is kept for backward
+    compatibility but raises ValueError if True — making accidental re-enablement
+    of public Drive permissions a loud failure rather than a silent regression.
     """
+    if public:
+        raise ValueError(
+            "upload_receipt_image: public=True is not permitted. "
+            "All uploads are private (drive.file scope only). "
+            "Remove public=True from the call site."
+        )
     year = int(date[:4]) if date and len(date) >= 4 else datetime.now().year
     drive = drive_service()
     for attempt in range(2):
@@ -402,11 +407,6 @@ def upload_receipt_image(filename: str, data: bytes, mime_type: str,
                 )
                 .execute()
             )
-            if public:
-                # Retained for back-compat; not called by any current path.
-                drive.permissions().create(
-                    fileId=created["id"], body={"type": "anyone", "role": "reader"}
-                ).execute()
             return {"link": created["webViewLink"], "name": created.get("name", filename)}
         except HttpError as e:
             if e.resp.status == 404 and attempt == 0:

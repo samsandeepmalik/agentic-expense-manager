@@ -73,7 +73,6 @@ async def build_receipt_prompt(
 
     parts = [
         "The user submitted a receipt image.",
-        f"Saved receipt image path: {image_path}",
         "",
         "OCR-extracted text from the receipt:",
         "---",
@@ -84,7 +83,7 @@ async def build_receipt_prompt(
         parts.append(f'User note: "{user_text.strip()}"')
     parts.append(
         "Extract the transaction details (date, merchant, total incl. taxes), "
-        "choose a category, and call record_transaction with image_path set."
+        f"choose a category, and call record_transaction with image_path=\"{image_path}\"."
     )
     return "\n".join(parts)
 
