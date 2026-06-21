@@ -82,7 +82,7 @@ async def parse_with_agent(text: str, profile_id: int) -> list[dict]:
 
 
 def _persist_import(conn, filename: str, rows: list[dict], profile_id: int,
-                    channel: str = "import") -> int:
+                    channel: str = "import", source_link: str | None = None) -> int:
     """Persist parsed rows as a review-ready import. Flags duplicates and
     initialises per-row skip. Does NOT commit — the caller's get_db() context
     manager owns the transaction boundary. Returns the new import id."""
@@ -91,14 +91,19 @@ def _persist_import(conn, filename: str, rows: list[dict], profile_id: int,
         row["duplicate"] = flag
         row["skip"] = flag
     cursor = conn.execute(
-        "INSERT INTO imports(filename, profile_id, channel, status, rows) "
-        "VALUES (?,?,?,'review',?)",
-        (filename, profile_id, channel, json.dumps(rows)))
+        "INSERT INTO imports(filename, profile_id, channel, status, rows, source_link) "
+        "VALUES (?,?,?,'review',?,?)",
+        (filename, profile_id, channel, json.dumps(rows), source_link))
     import_id = cursor.lastrowid
     audit.record(conn, "import_uploaded", channel=channel, ref=str(import_id),
                  detail=f"{filename}: {len(rows)} rows parsed",
                  profile_id=profile_id)
     return import_id
+
+
+def set_source_link(import_id: int, link: str) -> None:
+    with get_db() as conn:
+        conn.execute("UPDATE imports SET source_link=? WHERE id=?", (link, import_id))
 
 
 async def start_import(filename: str, data: bytes,
@@ -214,7 +219,10 @@ def approve_import(import_id: int, indexes: list[int] | None,
             # ambiguous category) must not roll back the whole batch. Skip it,
             # report it, and let the good rows import.
             try:
-                txn_svc.create_transaction(conn, row | {
+                row_data = dict(row)
+                if not row_data.get("receipt_link") and record.get("source_link"):
+                    row_data["receipt_link"] = record["source_link"]
+                txn_svc.create_transaction(conn, row_data | {
                     "source": "import",
                     "profile_id": record["profile_id"],
                     "external_ref": f"import:{import_id}:{index}"}, audit_row=False)

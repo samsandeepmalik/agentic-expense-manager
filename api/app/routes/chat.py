@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import mimetypes
+from datetime import date
 
 from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
@@ -10,12 +14,35 @@ from fastapi.responses import StreamingResponse
 from ..agent.runtime import sessions
 from ..db import get_db
 from ..services import chat_store
+from ..services import google_client as gc
 from ..services import imports as imports_svc
+from ..services import profiles as prof_svc
 from ..services.receipts import build_receipt_prompt
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_STATEMENT_EXT = (".csv", ".xlsx", ".xls")
+_STATEMENT_EXT = (".csv", ".xlsx", ".xls", ".pdf")
+
+
+async def _try_upload_import_source(import_id: int, filename: str,
+                                    data: bytes, content_type: str | None) -> None:
+    """Upload source file to Drive and store link on import. Silent on failure."""
+    def _upload() -> None:
+        import_record = imports_svc.get_import(import_id)
+        with get_db() as conn:
+            profile = prof_svc.get_profile(conn, import_record["profile_id"])
+        mime = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        result = gc.upload_receipt_image(
+            filename, data, mime, profile=profile, date=date.today().isoformat())
+        link = result["link"] if isinstance(result, dict) else result
+        imports_svc.set_source_link(import_id, link)
+
+    try:
+        await asyncio.to_thread(_upload)
+    except Exception:
+        logger.debug("Drive upload skipped for import %s", import_id, exc_info=True)
 
 
 def _sse(payload: dict) -> str:
@@ -23,8 +50,7 @@ def _sse(payload: dict) -> str:
 
 
 def _is_statement(filename: str | None) -> bool:
-    name = (filename or "").lower()
-    return name.endswith(_STATEMENT_EXT) or name.endswith(".pdf")
+    return bool((filename or "").lower().endswith(_STATEMENT_EXT))
 
 
 @router.get("/api/chat/sessions")
@@ -70,6 +96,8 @@ async def send_message(session_id: str, message: str = Form(""),
                 yield _sse({"type": "status", "text": "Reading statement…"})
                 result = await imports_svc.classify_and_start(filename, data)
                 if result["kind"] == "statement":
+                    await _try_upload_import_source(
+                        result["import_id"], filename, data, content_type)
                     prompt = (f"{message}\n\n[The user uploaded the statement "
                               f"'{filename}'. It was parsed as import "
                               f"#{result['import_id']}. Review it with "
