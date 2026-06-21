@@ -99,6 +99,11 @@ async def _scheduler_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    if not config.api_key:
+        logger.warning(
+            "API_KEY is not set — server is running in open (unauthenticated) mode. "
+            "Set API_KEY in .env to require authentication."
+        )
     for channel in CHANNELS:
         channel.set_handler(_handle_channel_message)
         try:
@@ -118,7 +123,9 @@ app = FastAPI(title="Expense Manager API", lifespan=lifespan,
 register_error_handler(app)
 
 app.add_middleware(CORSMiddleware, allow_origins=[config.web_origin],
-                   allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+                   allow_credentials=True,
+                   allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+                   allow_headers=["Content-Type", "Authorization", "X-Api-Key"])
 
 for module in (chat, dashboard, transactions, categories, recurring,
                imports, settings, sync, whatsapp_routes, google_auth, audit, profiles):
