@@ -8,12 +8,22 @@ from fastapi import APIRouter, Query
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field, field_validator
 
+from ..config import config
 from ..db import get_db
 from ..errors import AppError
 from ..services import transactions as svc
 from ..services.periods import resolve_period
 
 router = APIRouter()
+
+
+def _confined_file_response(path_str: str) -> FileResponse:
+    """Serve a file only if it resolves inside config.data_dir. Raises 403 otherwise."""
+    resolved = Path(path_str).resolve()
+    allowed = config.data_dir.resolve()
+    if not str(resolved).startswith(str(allowed) + "/") and resolved != allowed:
+        raise AppError("forbidden", "Access denied", 403)
+    return FileResponse(str(resolved))
 
 
 class TransactionIn(BaseModel):
@@ -132,7 +142,7 @@ async def receipt_image(txn_id: int):
         txn = svc.get_transaction(conn, txn_id)
     if not txn["image_path"]:
         raise AppError("no_receipt", "Transaction has no receipt image", 404)
-    return FileResponse(txn["image_path"])
+    return _confined_file_response(txn["image_path"])
 
 
 @router.get("/api/receipts/{txn_id}/preview")
@@ -145,5 +155,5 @@ async def receipt_preview(txn_id: int):
     if path.suffix.lower() == ".pdf":
         preview = path.with_suffix(".preview.png")
         if preview.exists():
-            return FileResponse(str(preview))
-    return FileResponse(txn["image_path"])
+            return _confined_file_response(str(preview))
+    return _confined_file_response(txn["image_path"])
