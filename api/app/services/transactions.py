@@ -15,10 +15,6 @@ from . import dedup
 from . import profiles as prof_svc
 from . import tax as tax_svc
 
-COLUMNS = ["id", "date", "type", "category_id", "description", "notes", "merchant",
-           "amount", "tax_breakdown", "total", "counted", "image_path",
-           "source", "external_ref", "sync_status", "loan", "created_at", "updated_at"]
-
 
 def _request_sync() -> None:
     """Mark data dirty for the background Google sync worker (lazy import —

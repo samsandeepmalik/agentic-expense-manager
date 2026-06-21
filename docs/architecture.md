@@ -142,7 +142,7 @@ The tool set:
 | Tool | Notes |
 |---|---|
 | `record_transaction` | total only (taxes derived server-side); also `notes`, `receipt_link`; on a likely duplicate returns `{duplicate: true, …}` instead of saving — re-call with `confirm_duplicate: true` to override |
-| `update_transaction` / `delete_transaction` | edit or remove by id |
+| `update_transaction` / `delete_transaction` | edit or remove by id; updatable fields include date, merchant, total, category, notes, `receipt_link` (cannot be cleared to null via PATCH — omit the field to leave it unchanged) |
 | `query_transactions` | date / type / category / text / loan filters |
 | `get_summary` | dashboard-style aggregates |
 | `manage_categories` / `manage_budgets` | set categories / per-category budgets |
@@ -183,11 +183,18 @@ only after the user agrees — **gate 1**) → `remap_import` to assign the unre
 rows → shows the final mapping and waits for the user (**gate 2**) → `approve_import`.
 The parsed rows live in the `imports` table the whole time — the agent works by
 `import_id` over summaries and a mapping, never the full row payload, so context
-stays bounded on large statements. The flow reuses the existing import pipeline
-(`parse_with_agent`, `dedup.flag_duplicates`, `approve_import`), so dedup, audit
-(`channel='chat'`), idempotency and per-row fault tolerance all apply unchanged.
-WhatsApp is out of scope (its document handling only carries pdf/image; see
-`docs/design/2026-06-15-chat-statement-import.md`).
+stays bounded on large statements. After `classify_and_start` returns, the
+original source file is uploaded to Drive in the background
+(`_try_upload_import_source`, `asyncio.to_thread`, silent on failure) and the
+Drive URL stored as `imports.source_link`. At `approve_import` time, any row
+that lacks its own `receipt_link` inherits `source_link`, linking it back to the
+original statement. If the upload has not completed yet (fast approval) or Drive
+is not connected, `source_link` is NULL and no link is stamped — this is
+intentional degradation, not a failure. The flow reuses the existing import
+pipeline (`parse_with_agent`, `dedup.flag_duplicates`, `approve_import`), so
+dedup, audit (`channel='chat'`), idempotency and per-row fault tolerance all
+apply unchanged. WhatsApp is out of scope (its document handling only carries
+pdf/image; see `docs/design/2026-06-15-chat-statement-import.md`).
 
 ## Duplicate detection
 
@@ -388,6 +395,7 @@ erDiagram
         text rows "JSON"
         int profile_id FK
         text channel "import|chat"
+        text source_link "Drive URL of uploaded source file (nullable)"
     }
     settings {
         text key PK
@@ -416,7 +424,9 @@ budgets (a child with its own budget is tracked on its own line, not double-coun
 Migrations are idempotent blocks in `db.init_db()` (added via `PRAGMA
 table_info` checks): `receipt_link`, `loan`, `parent_id` on categories,
 `profile_id` on `imports` (scopes statement imports per profile), `channel` on
-`imports` (`'import'` default; `'chat'` marks chat-originated imports) and on
+`imports` (`'import'` default; `'chat'` marks chat-originated imports),
+`source_link` on `imports` (Drive URL of the uploaded statement source file,
+nullable) and `channel` on
 `audit_log` (nullable — NULL = global event such as a sync run),
 `prompt_loan` on `profiles` (default 0); legacy settings keys migrated then
 deleted. The profiles migration rebuilds

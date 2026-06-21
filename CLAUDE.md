@@ -63,8 +63,9 @@ api/app/
     imports.py             statement upload → agent parses rows → review/approve.
                            classify_and_start routes a CHAT upload (receipt vs
                            statement); import_summary + remap_import drive the
-                           in-chat flow; _persist_import shared; `channel` column
-                           marks chat-originated imports
+                           in-chat flow; _persist_import(source_link=) shared;
+                           set_source_link() stores the Drive URL after async
+                           upload; `channel` column marks chat-originated imports
     sync.py                one-way Google push; request_sync()/sync_worker() debounce.
                            Per-profile configurable columns (COLUMN_REGISTRY +
                            SHEET_COLUMN_CONFIG); frozen TOTALS row at top (row 2,
@@ -77,7 +78,8 @@ api/app/
                            settings table (.env fallback for creds)
     summary_text.py        WhatsApp weekly summary text
   agent/
-    runtime.py             Session per chat id; history replay from chat_store; SSE events
+    runtime.py             Session per chat id; last 30 messages (15 pairs) replayed
+                           from chat_store on construction; SSE events
     anthropic_provider.py  Claude Max OAuth provider — PROTECTED
     tools.py               record/update/delete_transaction, query, get_summary,
                            manage_* (recurring has update), list_profiles,
@@ -133,8 +135,12 @@ web/src/
   vs statement; a statement starts an import and the agent reviews it via
   `get_import_summary`, helps organize categories, `remap_import`s rows, then
   `approve_import`s — TWO confirm gates (create/organize categories; record).
-  Rows stay server-side; the agent works by import_id. Agent replies render as
-  markdown (react-markdown + GFM).
+  Rows stay server-side; the agent works by import_id. After `classify_and_start`
+  returns, the original source file is uploaded to Drive asynchronously
+  (`_try_upload_import_source`, silent on failure) and the Drive URL stored as
+  `import.source_link`; at `approve_import` time, any row without its own
+  `receipt_link` inherits `source_link` as its `receipt_link`. Agent replies
+  render as markdown (react-markdown + GFM).
 - **Import**: upload → agent structures rows → review grid (per-profile chooser,
   inline-edit category/sub/type/total/loan/notes/receipt_link, dup flag) →
   approve sends the edited rows. Grid fetches the target book's categories via
@@ -202,3 +208,9 @@ web/src/
   else. It is a soft WARN, never a hard block (legit dups exist, e.g. two coffees);
   `confirm_duplicate` bypasses it. Receipt match needs a stored `receipt_link`, so
   it only fires where one is set (agent, QuickAdd receipt field, import).
+- Statement source-file Drive upload (`_try_upload_import_source`) is async and
+  silent-on-failure — it runs after `classify_and_start` returns, inside the SSE
+  stream generator. If the user approves the import before the upload completes
+  (fast approval, slow Drive) or Google Drive is not configured, `import.source_link`
+  will be NULL and no `receipt_link` is stamped on the resulting transactions.
+  This is intentional degradation; a missing link does not fail the import.

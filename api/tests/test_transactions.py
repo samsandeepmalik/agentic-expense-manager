@@ -277,3 +277,89 @@ def test_update_transaction_rejects_empty_string_date(conn):
     with pytest.raises(AppError) as exc_info:
         svc.update_transaction(conn, txn["id"], {"date": ""})
     assert exc_info.value.code == "invalid_date"
+
+
+# ---------------------------------------------------------------------------
+# PATCH receipt_link
+# ---------------------------------------------------------------------------
+
+_LINK = "https://drive.google.com/file/d/XYZ/view"
+
+
+def test_update_transaction_sets_receipt_link(conn):
+    """Patching receipt_link stores it and returns it in the result."""
+    txn = _create(conn)
+    assert txn.get("receipt_link") is None
+    updated = svc.update_transaction(conn, txn["id"], {"receipt_link": _LINK})
+    assert updated["receipt_link"] == _LINK
+    # Persisted: re-fetch via get_transaction confirms
+    fetched = svc.get_transaction(conn, txn["id"])
+    assert fetched["receipt_link"] == _LINK
+
+
+def test_update_transaction_preserves_receipt_link_when_not_in_changes(conn):
+    """Patching other fields on a transaction that already has a receipt_link
+    must not clear the link."""
+    txn = svc.create_transaction(conn, {
+        "date": "2026-06-05", "type": "expense", "category": "Groceries",
+        "total": 50.0, "receipt_link": _LINK})
+    assert txn["receipt_link"] == _LINK
+    # Now patch only the total — receipt_link must survive
+    updated = svc.update_transaction(conn, txn["id"], {"total": 60.0})
+    assert updated["receipt_link"] == _LINK
+
+
+def test_patch_route_sets_receipt_link(db_path):
+    """PATCH /api/transactions/:id with receipt_link stores the value."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import app.routes.transactions as txn_routes
+
+    application = FastAPI()
+    application.include_router(txn_routes.router)
+    client = TestClient(application)
+
+    from app.db import get_db
+    with get_db() as conn:
+        txn = svc.create_transaction(conn, {
+            "date": "2026-06-05", "type": "expense", "category": "Groceries",
+            "total": 20.0})
+
+    resp = client.patch(f"/api/transactions/{txn['id']}",
+                        json={"receipt_link": _LINK})
+    assert resp.status_code == 200
+    assert resp.json()["receipt_link"] == _LINK
+
+
+def test_patch_route_explicit_null_receipt_link_clears_it(db_path):
+    """PATCH with receipt_link=null explicitly clears the stored link.
+    The handler uses model_dump(exclude_unset=True), so an explicit null is
+    included in the changes dict and the UPDATE sets the column to NULL.
+    Omitting receipt_link entirely (a different request) leaves it unchanged."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import app.routes.transactions as txn_routes
+
+    application = FastAPI()
+    application.include_router(txn_routes.router)
+    client = TestClient(application)
+
+    from app.db import get_db
+    with get_db() as conn:
+        txn = svc.create_transaction(conn, {
+            "date": "2026-06-05", "type": "expense", "category": "Groceries",
+            "total": 20.0, "receipt_link": _LINK})
+
+    # Explicit null clears the link (security fix: Drive links can now be revoked)
+    resp = client.patch(f"/api/transactions/{txn['id']}",
+                        json={"receipt_link": None, "merchant": "Costco"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["receipt_link"] is None     # cleared by explicit null
+    assert body["merchant"] == "Costco"     # other field did change
+
+    # Omitting receipt_link entirely leaves it unchanged
+    resp2 = client.patch(f"/api/transactions/{txn['id']}",
+                         json={"merchant": "Walmart"})
+    assert resp2.status_code == 200
+    assert resp2.json()["receipt_link"] is None   # still null, not restored

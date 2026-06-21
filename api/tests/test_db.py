@@ -33,6 +33,37 @@ def test_connection_pragmas(conn):
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
 
 
+def test_source_link_column_migration(tmp_path, monkeypatch):
+    """source_link column is added idempotently to pre-migration imports tables."""
+    from app import db as db_mod
+    db_mod.DB_PATH = tmp_path / "source_link_migrate.db"
+    db_mod.init_db()
+    with db_mod.get_db() as conn:
+        # Simulate a pre-migration DB by dropping the column via table rebuild
+        conn.execute("CREATE TABLE imports_old AS SELECT * FROM imports")
+        conn.execute("DROP TABLE imports")
+        conn.execute("""CREATE TABLE imports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'parsing',
+            rows TEXT NOT NULL DEFAULT '[]',
+            error TEXT,
+            profile_id INTEGER NOT NULL DEFAULT 1,
+            channel TEXT NOT NULL DEFAULT 'import',
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )""")
+        conn.execute("INSERT INTO imports SELECT id, filename, status, rows, "
+                     "error, profile_id, channel, created_at FROM imports_old")
+        conn.execute("DROP TABLE imports_old")
+    # Re-running init_db must add source_link without error
+    db_mod.init_db()
+    with db_mod.get_db() as conn:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(imports)")}
+        assert "source_link" in cols
+    # Running init_db a second time (column already exists) must also be a no-op
+    db_mod.init_db()
+
+
 def test_receipt_link_column_and_migration(tmp_path, monkeypatch):
     from app import db
     db.DB_PATH = tmp_path / "migrate.db"
