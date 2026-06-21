@@ -7,8 +7,9 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 
 from .agent.runtime import run_to_completion, sessions
 from .channels.base import BaseChannelRegistry
@@ -28,6 +29,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 CHANNELS: list[BaseChannelRegistry] = [whatsapp]
+
+_api_key_header = APIKeyHeader(name="X-Api-Key", auto_error=False)
+
+
+async def verify_api_key(request: Request,
+                         key: str | None = Security(_api_key_header)) -> None:
+    """Enforce X-Api-Key when API_KEY env var is set. Open when it is empty."""
+    if request.url.path == "/api/health":
+        return
+    required = config.api_key
+    if required and key != required:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 async def _handle_channel_message(chat_id, text, image_bytes, image_mime):
@@ -86,7 +99,8 @@ async def lifespan(app: FastAPI):
     sync_task.cancel()
 
 
-app = FastAPI(title="Expense Manager API", lifespan=lifespan)
+app = FastAPI(title="Expense Manager API", lifespan=lifespan,
+              dependencies=[Depends(verify_api_key)])
 register_error_handler(app)
 
 app.add_middleware(CORSMiddleware, allow_origins=[config.web_origin],
@@ -97,6 +111,6 @@ for module in (chat, dashboard, transactions, categories, recurring,
     app.include_router(module.router)
 
 
-@app.get("/api/health")
+@app.get("/api/health", dependencies=[])
 async def health():
     return {"ok": True}

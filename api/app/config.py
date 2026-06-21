@@ -18,6 +18,7 @@ for candidate in (_HERE.parent / ".env", _HERE / ".env"):
 class Config:
     port: int = int(os.getenv("PORT", "8000"))
     web_origin: str = os.getenv("WEB_ORIGIN", "http://localhost:5173")
+    api_key: str = os.getenv("API_KEY", "")
 
     claude_oauth_token: str = os.getenv("CLAUDE_CODE_OAUTH_TOKEN", "")
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
