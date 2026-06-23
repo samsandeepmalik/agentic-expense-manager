@@ -51,8 +51,8 @@ async def _try_upload_import_source(import_id: int, filename: str,
 
     try:
         await asyncio.to_thread(_upload)
-    except Exception:
-        logger.warning("Drive upload failed for import %s", import_id, exc_info=True)
+    except Exception as exc:
+        logger.warning("Drive upload failed for import %s: %s", import_id, type(exc).__name__)
 
 
 def _sse(payload: dict) -> str:
@@ -151,7 +151,7 @@ async def send_message(session_id: str, message: str = Form(""),
         except Exception as exc:  # noqa: BLE001 — degrade, never 500 mid-stream
             yield _sse({"type": "done",
                         "text": "Sorry, something went wrong on my side. Try again.",
-                        "error": str(exc)})
+                        "error": exc.message if isinstance(exc, AppError) else "Internal server error"})
 
     return StreamingResponse(stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache",

@@ -203,7 +203,7 @@ def sheets_service():
 def ensure_app_folder() -> str:
     """Get or create the single root app folder in Drive. Always verifies existence."""
     drive = drive_service()
-    folder_name = get_folder_base_name()
+    folder_name = get_folder_base_name().replace("'", "\\'")
     results = (
         drive.files()
         .list(
@@ -239,7 +239,7 @@ def ensure_drive_folder(profile: dict) -> str:
     """Get or create the profile subfolder inside the app root folder. Always verifies."""
     app_folder_id = ensure_app_folder()
     drive = drive_service()
-    profile_name = profile["name"]
+    profile_name = profile["name"].replace("'", "\\'")
     results = (
         drive.files()
         .list(
@@ -280,11 +280,12 @@ def find_spreadsheet(name: str, parent_folder_id: str) -> str | None:
     or None. Lets sync reuse a sheet instead of creating a duplicate when the
     stored spreadsheet_id is missing (DB swap/restore)."""
     drive = drive_service()
+    safe_name = name.replace("'", "\\'")
     results = (
         drive.files()
         .list(
             q=(
-                f"name='{name}' and '{parent_folder_id}' in parents"
+                f"name='{safe_name}' and '{parent_folder_id}' in parents"
                 " and mimeType='application/vnd.google-apps.spreadsheet'"
                 " and trashed=false"
             ),

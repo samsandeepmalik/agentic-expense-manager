@@ -128,6 +128,9 @@ notes, etc.) — pass only the fields that change; taxes recompute automatically
 Use delete_transaction to remove a transaction permanently. ALWAYS confirm with
 the user before calling delete_transaction and state which transaction will be
 deleted (id, date, merchant, total).
+After update_transaction or delete_transaction succeeds, always cite the
+transaction ID as `#<id>` in your reply so the user can verify which
+transaction was affected.
 
 ## Profiles
 The app supports multiple profiles (e.g. Personal, Business). Use list_profiles
