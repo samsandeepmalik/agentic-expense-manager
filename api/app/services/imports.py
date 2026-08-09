@@ -352,6 +352,7 @@ def import_summary(conn, import_id: int, *, sample_cap: int = 10,
     return {
         "import_id": import_id,
         "profile": prof_svc.get_profile(conn, pid)["name"],
+        "source_link": record.get("source_link"),
         "total_rows": len(rows),
         "duplicates": duplicates,
         "to_record": sum(1 for r in rows if not r.get("skip")),

@@ -6,7 +6,7 @@
 [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org)
 [![Node 22](https://img.shields.io/badge/node-22-brightgreen.svg)](https://nodejs.org)
 
-[Architecture](docs/architecture.md) · [Development](docs/development.md) · [Contributing](CONTRIBUTING.md) · [WhatsApp Setup](docs/whatsapp-setup.md) · [Google Sync](docs/google-drive-setup.md)
+[Architecture](docs/architecture.md) · [Development](docs/development.md) · [Deploy](docs/deployment/oracle-cloud-free-tier.md) · [Contributing](CONTRIBUTING.md) · [WhatsApp Setup](docs/whatsapp-setup.md) · [Google Sync](docs/google-drive-setup.md)
 
 ---
 
@@ -93,6 +93,19 @@ Local dev without Docker: `make dev-api` / `make dev-web` — see [docs/developm
 
 ---
 
+## Deploy
+
+The app runs on a single VM. **Oracle Cloud Always Free** provides an ARM VM (4 OCPU, 24 GB RAM) that covers this app at $0/month, forever — no expiry, no auto-charges.
+
+```bash
+make bootstrap ORACLE_IP=x.x.x.x   # one-time VM setup (Docker, Caddy, swap)
+make deploy    ORACLE_IP=x.x.x.x   # rsync code + restart containers on VM
+```
+
+See [docs/deployment/oracle-cloud-free-tier.md](docs/deployment/oracle-cloud-free-tier.md) for the full guide: why this stack, VM creation, first-deploy walkthrough, day-to-day ops, backup, and troubleshooting.
+
+---
+
 ## Setup & configuration
 
 ### LLM (Claude)
@@ -174,6 +187,7 @@ All persistent data lives in **`./data/`** at the repo root (`expense.db`, `rece
 
 | I want to… | Read |
 |---|---|
+| Deploy to Oracle Cloud (free tier, forever) | [docs/deployment/oracle-cloud-free-tier.md](docs/deployment/oracle-cloud-free-tier.md) |
 | Set up Google Drive/Sheets sync (step by step) | [docs/google-drive-setup.md](docs/google-drive-setup.md) |
 | Set up WhatsApp pairing | [docs/whatsapp-setup.md](docs/whatsapp-setup.md) |
 | Understand system design (diagrams, data flow, decisions) | [docs/architecture.md](docs/architecture.md) |

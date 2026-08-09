@@ -10,9 +10,10 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({ date: new Date().toISOString().slice(0, 10),
     type: "expense" as "income" | "expense", categoryId: null as number | null,
     total: "", merchant: "", description: "", loan: false, notes: "",
-    receiptLink: "" });
+    receiptLink: "", taxable: null as boolean | null });
   const [error, setError] = useState("");
   const [dup, setDup] = useState<DuplicateMatch | null>(null);
+  const [taxReset, setTaxReset] = useState(false);
 
   const selected = categories.data?.find((c) => c.id === form.categoryId);
   const totalNum = parseFloat(form.total);
@@ -21,8 +22,10 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
   // Tax breakdown comes from the server (same _compute path used on save) so the
   // preview can never diverge from what's actually recorded. No money math here.
   const preview = useQuery({
-    queryKey: ["txn-preview", form.type, form.categoryId, totalNum],
-    enabled: totalValid && !!form.categoryId && !!selected?.taxable,
+    // Use null instead of NaN when total is invalid: React Query serialises NaN
+    // as null anyway, collapsing all invalid-total entries to the same cache key.
+    queryKey: ["txn-preview", form.type, form.categoryId, totalValid ? totalNum : null],
+    enabled: totalValid && !!form.categoryId && !!selected?.taxable && form.taxable !== false,
     queryFn: () => post<{ breakdown: Record<string, number> }>(
       "/api/transactions/preview",
       { type: form.type, category_id: form.categoryId, total: totalNum }),
@@ -36,7 +39,8 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
         total: totalNum, merchant: form.merchant, description: form.description,
         loan: form.loan, notes: form.notes,
         receipt_link: form.receiptLink.trim() || null,
-        confirm_duplicate: confirm }),
+        confirm_duplicate: confirm,
+        ...(form.taxable === false ? { taxable: false } : {}) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
@@ -76,14 +80,27 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
             categories={categories.data ?? []}
             type={form.type}
             valueId={form.categoryId}
-            onChange={(id) => set("categoryId", id)}
+            onChange={(id) => {
+              setForm((f) => ({ ...f, categoryId: id, taxable: null }));
+              setTaxReset(true);
+              setTimeout(() => setTaxReset(false), 3000);
+            }}
           />
+          {taxReset && <p className="muted" style={{ margin: 0, fontSize: "0.85em" }}>Tax setting reset for new category.</p>}
           <input placeholder="Total paid ($)" inputMode="decimal" value={form.total}
                  onChange={(e) => set("total", e.target.value)} />
           {showTotalHint && <p className="neg" style={{ margin: 0, fontSize: "0.85em" }}>Enter a valid amount.</p>}
-          {taxPreview.length > 0 && (
+          {form.taxable !== false && taxPreview.length > 0 && (
             <p className="muted">Includes {taxPreview.map((t) =>
               `${t.name} $${t.value.toFixed(2)}`).join(" + ")}</p>)}
+          {selected?.taxable && (
+            <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.85rem" }}>
+              <input type="checkbox"
+                checked={form.taxable !== false}
+                onChange={(e) => set("taxable", e.target.checked ? null : false)} />
+              {form.taxable === false ? "No taxes on this receipt" : "Taxes included"}
+            </label>
+          )}
           {selected && !selected.taxable && <p className="muted">No tax for {selected.name}.</p>}
           <input placeholder="Merchant" value={form.merchant}
                  onChange={(e) => set("merchant", e.target.value)} />
@@ -113,7 +130,7 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
             </div>
           )}
           <button className="primary"
-                  disabled={!form.categoryId || !totalValid || save.isPending}
+                  disabled={!form.categoryId || !totalValid || save.isPending || !!dup}
                   onClick={() => { setDup(null); save.mutate(false); }}>
             {save.isPending ? "Saving…" : "Save"}</button>
         </div>

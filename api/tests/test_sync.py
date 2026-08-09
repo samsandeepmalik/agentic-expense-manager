@@ -633,11 +633,11 @@ def test_profile_isolation_profile_a_failure_does_not_block_b(db_path):
     call_order = []
     original_reconcile_profile = sync._reconcile_profile
 
-    def fake_reconcile_profile(profile):
+    def fake_reconcile_profile(profile, **kwargs):
         call_order.append(profile["id"])
         if profile["id"] == 1:
             raise RuntimeError("Drive API down")
-        return original_reconcile_profile(profile)
+        return original_reconcile_profile(profile, **kwargs)
 
     grid: dict = {}
     with patch.object(sync, "_reconcile_profile", side_effect=fake_reconcile_profile), \
@@ -656,3 +656,20 @@ def test_profile_isolation_profile_a_failure_does_not_block_b(db_path):
         err_b = get_setting(c, f"sync_error_{b_id}")
     assert err_a is not None and "Drive API down" in err_a
     assert err_b is None
+
+
+def test_safe_reconcile_had_errors_preserves_global_error(db_path):
+    from app.db import get_db, get_setting, set_setting
+    from app.settings_keys import LAST_SYNC_AT, LAST_SYNC_ERROR
+
+    with get_db() as conn:
+        set_setting(conn, LAST_SYNC_ERROR, "previous error")
+
+    with patch.object(sync, "_auto_reconcile", return_value={"synced": 1, "had_errors": True}), \
+         patch.object(sync, "_record_success") as mock_success:
+        sync._safe_reconcile()
+
+    mock_success.assert_not_called()
+    with get_db() as conn:
+        assert get_setting(conn, LAST_SYNC_ERROR) == "previous error"
+        assert get_setting(conn, LAST_SYNC_AT) is not None

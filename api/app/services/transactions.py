@@ -52,9 +52,11 @@ def _row_to_dict(conn, row) -> dict:
     return txn
 
 
-def _compute(conn, category: dict, total: float, profile_id: int | None = None) -> dict:
+def _compute(conn, category: dict, total: float, profile_id: int | None = None,
+             taxable_override: bool | None = None) -> dict:
     components = tax_svc.active_components(conn, profile_id)
-    calc = tax_svc.back_calculate(total, components, bool(category["taxable"]))
+    taxable = taxable_override if taxable_override is not None else bool(category["taxable"])
+    calc = tax_svc.back_calculate(total, components, taxable)
     counted = round(total * category["percent"] / 100, 2)
     return {"amount": calc["amount"], "breakdown": calc["breakdown"], "counted": counted}
 
@@ -95,23 +97,38 @@ def create_transaction(conn: sqlite3.Connection, data: dict, *,
                     "id": m["id"], "date": m["date"], "merchant": m["merchant"],
                     "total": m["total"]}},
             )
+    import_id = data.get("import_id")
+    if import_id:
+        # Manual record after the user skipped approve_import — inherit the
+        # statement's Drive link the same way approve_import's own rows do,
+        # so the receipt isn't lost just because the import itself was skipped.
+        # Cross-profile: still tag external_ref for audit, but never copy a
+        # link belonging to a different book onto this transaction.
+        from . import imports as imp_svc
+        record = imp_svc.get_import(int(import_id))
+        data = dict(data)
+        data.setdefault("external_ref", f"import:{import_id}:manual")
+        if record["profile_id"] == pid and not (data.get("receipt_link") or "").strip() \
+                and record.get("source_link"):
+            data["receipt_link"] = record["source_link"]
     category = _resolve_category(conn, data, pid)
     _validate_receipt_link(data.get("receipt_link"))
     if data["type"] not in ("income", "expense"):
-        raise AppError("invalid_type", "type must be income or expense")
+        raise AppError("invalid_type", "type must be income or expense", 400)
     total = round(float(data["total"]), 2)
-    parts = _compute(conn, category, total, profile_id=pid)
+    parts = _compute(conn, category, total, profile_id=pid,
+                     taxable_override=data.get("taxable"))
     cursor = conn.execute(
         """INSERT INTO transactions(date, type, category_id, description, notes,
            merchant, amount, tax_breakdown, total, counted, image_path, source,
-           external_ref, sync_status, loan, receipt_link, profile_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           external_ref, sync_status, loan, receipt_link, profile_id, taxable)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (data["date"], data["type"], category["id"], data.get("description", ""),
          data.get("notes", ""),
          data.get("merchant", ""), parts["amount"], json.dumps(parts["breakdown"]),
          total, parts["counted"], data.get("image_path"), data.get("source", "ui"),
          data.get("external_ref"), "pending", int(bool(data.get("loan", False))),
-         data.get("receipt_link"), pid),
+         data.get("receipt_link"), pid, data.get("taxable")),
     )
     row = conn.execute("SELECT * FROM transactions WHERE id=?", (cursor.lastrowid,)).fetchone()
     result = _row_to_dict(conn, row)
@@ -131,9 +148,11 @@ def preview_transaction(conn: sqlite3.Connection, data: dict) -> dict:
     pid = data.get("profile_id") or prof_svc.active_id(conn)
     category = _resolve_category(conn, data, pid)
     total = round(float(data["total"]), 2)
-    parts = _compute(conn, category, total, profile_id=pid)
+    parts = _compute(conn, category, total, profile_id=pid,
+                     taxable_override=data.get("taxable"))
     return {"amount": parts["amount"], "breakdown": parts["breakdown"],
-            "counted": parts["counted"], "total": total}
+            "counted": parts["counted"], "total": total,
+            "taxable": data.get("taxable")}
 
 
 def list_transactions(conn, *, start: str | None = None, end: str | None = None,
@@ -159,8 +178,11 @@ def list_transactions(conn, *, start: str | None = None, end: str | None = None,
                 "  AND profile_id = t.profile_id))")
         params += [category, category]
     if q:
-        sql += " AND (t.merchant LIKE ? OR t.description LIKE ? OR t.notes LIKE ?)"
-        params += [f"%{q}%", f"%{q}%", f"%{q}%"]
+        # Escape LIKE special chars so the term is treated as a literal substring.
+        q_esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        sql += (" AND (t.merchant LIKE ? ESCAPE '\\' OR t.description LIKE ? ESCAPE '\\'"
+                " OR t.notes LIKE ? ESCAPE '\\')")
+        params += [f"%{q_esc}%", f"%{q_esc}%", f"%{q_esc}%"]
     sql += " ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?"
     params += [limit, offset]
     return [_row_to_dict(conn, r) for r in conn.execute(sql, params)]
@@ -190,17 +212,20 @@ def update_transaction(conn, txn_id: int, changes: dict,
         merged["category_id"] = category["id"]
     else:
         category = cat_svc.get_category(conn, merged["category_id"])
-    parts = _compute(conn, category, round(float(merged["total"]), 2), profile_id=pid)
+    parts = _compute(conn, category, round(float(merged["total"]), 2), profile_id=pid,
+                     taxable_override=(bool(merged["taxable"])
+                                       if merged.get("taxable") is not None else None))
     conn.execute(
         """UPDATE transactions SET date=?, type=?, category_id=?, description=?,
            notes=?, merchant=?, amount=?, tax_breakdown=?, total=?, counted=?, loan=?,
-           receipt_link=?, sync_status='pending', updated_at=datetime('now') WHERE id=?""",
+           receipt_link=?, taxable=?, sync_status='pending',
+           updated_at=datetime('now') WHERE id=?""",
         (merged["date"], merged["type"], merged["category_id"], merged["description"],
          merged.get("notes", ""),
          merged["merchant"], parts["amount"], json.dumps(parts["breakdown"]),
          round(float(merged["total"]), 2), parts["counted"],
          int(bool(merged.get("loan", False))),
-         merged.get("receipt_link"), txn_id),
+         merged.get("receipt_link"), merged.get("taxable"), txn_id),
     )
     result = get_transaction(conn, txn_id, pid)
     audit.record(conn, "transaction_updated", channel=result["source"],
@@ -265,7 +290,7 @@ def bulk_action(conn, ids: list[int], action: str, category: str | None = None,
         for txn_id in owned:
             update_transaction(conn, txn_id, {"category_id": target["id"]})
         return len(owned)
-    raise AppError("invalid_action", f"Unknown bulk action: {action}")
+    raise AppError("invalid_action", f"Unknown bulk action: {action}", 400)
 
 
 def export_csv(conn) -> str:

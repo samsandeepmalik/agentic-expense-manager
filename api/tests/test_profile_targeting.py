@@ -1,6 +1,8 @@
 """Agent operates on a NON-active profile by naming it per call — never needs
 to switch the active book (which the UI + other channels share). Covers the
 read/edit/delete/summary/recurring tools + the service params they rely on."""
+from datetime import date
+
 import pytest
 
 from app.agent.tools import build_tools
@@ -19,7 +21,7 @@ def _setup_business_with_txn(total=12.0):
     with get_db() as conn:
         biz = prof_svc.create_profile(conn, "Business", "incorporation")
         txn = txn_svc.create_transaction(conn, {
-            "date": "2026-06-05", "type": "expense", "category": "Groceries",
+            "date": date.today().isoformat(), "type": "expense", "category": "Groceries",
             "total": total, "profile_id": biz["id"]})
     return biz["id"], txn["id"]
 

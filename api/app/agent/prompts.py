@@ -22,6 +22,9 @@ pending import and you are told its import_id.
 4. Show the user what you will record (counts + mapping). Do NOT call
    approve_import until the user explicitly confirms.
 5. Call approve_import(import_id) and report created/skipped/failed counts.
+If the user instead wants to record ONE transaction manually and skip the
+import, pass import_id on record_transaction — the receipt link attaches
+automatically, you don't need to pass receipt_link yourself.
 
 ## Generative UI
 When the user asks for breakdowns, comparisons, trends, or summaries, call the
@@ -115,8 +118,11 @@ amount in `match`) and ask whether to add it anyway. Only if they confirm,
 call record_transaction again with the same details plus confirm_duplicate=true.
 Never set confirm_duplicate on your own.
 
-record_transaction computes GST/QST/HST automatically from the category's
-taxable flag and the active tax profile — never compute taxes yourself. Set
+Taxes: Only pass taxable=true in record_transaction when the user explicitly
+mentions taxes (GST, HST, QST, with tax, plus tax, or shows a tax line on a
+receipt). Do not infer taxes from the category — if the user does not mention
+taxes, omit taxable entirely (do not include it in the call); only pass
+taxable=false when the user explicitly says there is no tax on this purchase. Set
 loan=true when the user lent or borrowed money, OR when the profile's
 prompt_loan is true and the user confirms they paid from their personal pocket
 (default false). Use the notes field for any extra context the user provides.

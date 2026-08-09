@@ -12,6 +12,7 @@ import secrets
 from datetime import datetime
 from typing import Any
 
+import google.auth.exceptions
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -164,6 +165,7 @@ def _creds_to_dict(creds: Credentials) -> dict[str, Any]:
         "client_id": creds.client_id,
         "client_secret": creds.client_secret,
         "scopes": list(creds.scopes or SCOPES),
+        "expiry": creds.expiry.isoformat() if creds.expiry else None,
     }
 
 
@@ -171,10 +173,22 @@ def get_credentials() -> Credentials:
     tokens = _read(GOOGLE_TOKENS)
     if not tokens:
         raise GoogleNotConnectedError()
+    # Parse expiry from ISO string so the Credentials object knows when to refresh.
+    expiry_str = tokens.pop("expiry", None)
     creds = Credentials(**tokens)
+    if expiry_str:
+        creds.expiry = datetime.fromisoformat(expiry_str)
     if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        _write(GOOGLE_TOKENS, _creds_to_dict(creds))
+        try:
+            creds.refresh(Request())
+            _write(GOOGLE_TOKENS, _creds_to_dict(creds))
+        except google.auth.exceptions.RefreshError:
+            raise AppError(
+                "google_token_expired",
+                "Google token has expired or been revoked. "
+                "Reconnect Google in Settings → Google Sync.",
+                401,
+            )
     return creds
 
 

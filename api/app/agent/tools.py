@@ -62,11 +62,20 @@ RECORD_TRANSACTION_SCHEMA = {
         "notes": {"type": "string", "description": "Optional free-text notes about this transaction"},
         "receipt_link": {"type": "string",
                          "description": "External URL to a Drive doc or receipt (optional)"},
+        "import_id": {"type": "integer",
+                      "description": "Set when the user uploaded a statement (import) but is "
+                                     "recording this one manually instead of approving it. "
+                                     "Auto-attaches the statement's receipt link and tags the "
+                                     "transaction with the source import for audit."},
         "profile": {"type": "string",
                     "description": "Profile name to record into; defaults to the active profile"},
         "confirm_duplicate": {"type": "boolean",
             "description": "Set true ONLY after the user confirms adding a "
                            "transaction you warned was a possible duplicate."},
+        "taxable": {"type": "boolean",
+                    "description": "Set true ONLY when user explicitly mentions taxes "
+                                   "(GST, HST, QST, plus tax, tax included). "
+                                   "Do not set if taxes not mentioned."},
     },
     "required": ["date", "type", "category", "total"],
 }
@@ -99,6 +108,8 @@ UPDATE_TRANSACTION_SCHEMA = {
         "loan": {"type": "boolean"},
         "profile": {"type": "string",
                     "description": "Profile the transaction lives in; defaults to the active profile"},
+        "taxable": {"type": "boolean",
+                    "description": "Override tax calculation for this transaction"},
     },
     "required": ["id"],
 }
@@ -274,7 +285,12 @@ def build_tools(channel: str, ui_sink: UiSink, source: str) -> list[AgentTool]:
                         "loan": bool(params.get("loan", False)),
                         "notes": params.get("notes", ""),
                         "receipt_link": params.get("receipt_link"),
+                        "import_id": params.get("import_id"),
                         "confirm_duplicate": bool(params.get("confirm_duplicate", False)),
+                        # Guardrail: agent defaults to no-tax unless user explicitly
+                        # mentions taxes. False = override category; agent must set
+                        # True only when user says GST/HST/QST/with tax/plus tax.
+                        "taxable": params.get("taxable", False),
                     }
                     wanted = (params.get("profile") or "").strip().lower()
                     if wanted:

@@ -353,6 +353,11 @@ def _format_tab(sheets, spreadsheet_id: str, sheet_id: int,
                            "gridProperties": {"frozenRowCount": 2}},
             "fields": "gridProperties.frozenRowCount",
         }},
+        {"repeatCell": {     # clear any leftover bold from data rows (e.g. stale TOTALS position)
+            "range": {"sheetId": sheet_id, "startRowIndex": 2},
+            "cell": {"userEnteredFormat": {"textFormat": {"bold": False}}},
+            "fields": "userEnteredFormat.textFormat.bold",
+        }},
         {"repeatCell": {     # header row
             "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1},
             "cell": {"userEnteredFormat": {
@@ -436,6 +441,27 @@ def _row_ctx(conn, txn: dict, profile: dict) -> dict:
     return {"receipt_name": name, "receipt_link": link}
 
 
+def _sort_tab_by_date(sheets, spreadsheet_id: str, sheet_id: int,
+                      cols: list[dict], row_count: int) -> None:
+    """Sort data rows (index 2+) by the date column, newest first."""
+    if row_count == 0:
+        return
+    date_col_idx = next((i for i, c in enumerate(cols) if c["key"] == "date"), None)
+    if date_col_idx is None:
+        return
+    sheets.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{"sortRange": {
+            "range": {
+                "sheetId": sheet_id, "startRowIndex": 2,
+                "endRowIndex": 2 + row_count,
+                "startColumnIndex": 0, "endColumnIndex": len(cols),
+            },
+            "sortSpecs": [{"dimensionIndex": date_col_idx, "sortOrder": "DESCENDING"}],
+        }}]},
+    ).execute()
+
+
 def _reconcile_tab(conn, sheets, spreadsheet_id: str, tab: str,
                    txns: list, profile: dict, cols: list[dict],
                    sheet_id: int, force_full: bool = False) -> int:
@@ -470,6 +496,7 @@ def _reconcile_tab(conn, sheets, spreadsheet_id: str, tab: str,
             spreadsheetId=spreadsheet_id, range=f"'{tab}'!A1",
             valueInputOption="USER_ENTERED", body={"values": values}).execute()
         _format_tab(sheets, spreadsheet_id, sheet_id, cols)
+        _sort_tab_by_date(sheets, spreadsheet_id, sheet_id, cols, len(txns))
         return len(txns)
 
     # Header + TOTALS unchanged: incremental update/append by app txn id. The
@@ -512,13 +539,16 @@ def _reconcile_tab(conn, sheets, spreadsheet_id: str, tab: str,
 
     # The frozen TOTALS row (row 2) needs no update — its open-ended SUM already
     # covers the new data extent after the appends/deletes above.
+    _sort_tab_by_date(sheets, spreadsheet_id, sheet_id, cols, len(txns))
     return pushed
 
 
-def _reconcile_profile(profile: dict, force_full: bool = False) -> int:
+def _reconcile_profile(profile: dict, force_full: bool = False,
+                       current_year_only: bool = False) -> int:
     """Sync one profile to its Google Sheet. Returns rows pushed."""
     from .transactions import list_transactions
 
+    current_year = datetime.now().year  # snapshot once — avoids Dec 31→Jan 1 mid-sync race
     folder_id = gc.ensure_drive_folder(profile)
     profile["drive_folder_id"] = folder_id
 
@@ -526,7 +556,13 @@ def _reconcile_profile(profile: dict, force_full: bool = False) -> int:
         spreadsheet_id = _ensure_spreadsheet(conn, profile)
         sheets = gc.sheets_service()
         tabs = _tab_meta(sheets, spreadsheet_id)
-        txns = list_transactions(conn, limit=100000, profile_id=profile["id"])
+        if current_year_only:
+            year_start = f"{current_year}-01-01"
+            year_end = f"{current_year}-12-31"
+            txns = list_transactions(conn, start=year_start, end=year_end,
+                                     limit=100000, profile_id=profile["id"])
+        else:
+            txns = list_transactions(conn, limit=100000, profile_id=profile["id"])
         tax_cols = _tax_columns(conn, profile["id"], txns)
         cols = _resolve_columns(profile["id"], tax_cols)
 
@@ -548,9 +584,14 @@ def _reconcile_profile(profile: dict, force_full: bool = False) -> int:
                 txns_by_year[int(date[:4])].append(txn)
 
             existing_year_tabs = {int(t) for t in tabs if _YEAR_RE.match(t)}
+            all_years = sorted(set(txns_by_year.keys()) | existing_year_tabs)
             year_tab_titles: list[str] = []
             pushed = 0
-            for year in sorted(set(txns_by_year.keys()) | existing_year_tabs):
+            for year in all_years:
+                if current_year_only and year != current_year:
+                    # Skip reconciling historical tabs but track them for Summary.
+                    year_tab_titles.append(str(year))
+                    continue
                 tab, sheet_id = _ensure_year_tab(
                     sheets, spreadsheet_id, year, cols)
                 year_tab_titles.append(tab)
@@ -697,10 +738,58 @@ def _record_success(result: dict) -> None:
                    detail=f"{result['synced']} rows")
 
 
+def _has_historical_pending(conn, profile_id: int) -> bool:
+    """True if any pending transaction for this profile is from a past year."""
+    current_year = datetime.now().year
+    return conn.execute(
+        "SELECT 1 FROM transactions WHERE sync_status='pending' AND profile_id=?"
+        " AND CAST(strftime('%Y', date) AS INTEGER) < ?",
+        (profile_id, current_year),
+    ).fetchone() is not None
+
+
+def _auto_reconcile() -> dict:
+    """Fast auto-sync called by the debounced worker.
+    Uses current-year-only mode unless a past-year transaction is pending —
+    in that case falls back to full all-years reconcile for that profile.
+    Manual 'Resync' always does a full force-rewrite via resync_active_profile()."""
+    if not sync_enabled():
+        return {"synced": 0, "skipped": "google_not_connected"}
+
+    total_pushed = 0
+    with get_db() as conn:
+        profiles = [dict(r) for r in conn.execute("SELECT * FROM profiles")]
+
+    had_errors = False
+    for profile in profiles:
+        try:
+            with get_db() as conn:
+                needs_full_years = _has_historical_pending(conn, profile["id"])
+            pushed = _reconcile_profile(
+                profile, current_year_only=not needs_full_years)
+            total_pushed += pushed
+            with get_db() as conn:
+                set_setting(conn, f"sync_error_{profile['id']}", None)
+        except Exception as exc:
+            had_errors = True
+            logger.error("Sync failed for profile %s: %s", profile["name"], exc)
+            with get_db() as conn:
+                set_setting(conn, f"sync_error_{profile['id']}", str(exc))
+
+    return {"synced": total_pushed, "had_errors": had_errors}
+
+
 def _safe_reconcile() -> None:
     try:
-        result = reconcile()
-        _record_success(result)
+        result = _auto_reconcile()
+        if result.get("had_errors"):
+            # At least one profile failed — stamp timestamp/count but preserve any
+            # existing global error so status() doesn't falsely report all-clear.
+            with get_db() as conn:
+                set_setting(conn, LAST_SYNC_AT, datetime.now(timezone.utc).isoformat())
+                set_setting(conn, LAST_SYNC_COUNT, result.get("synced", 0))
+        else:
+            _record_success(result)
     except Exception as exc:  # noqa: BLE001
         from .audit import record
         logger.exception("Sync push failed; will retry on next reconcile")
@@ -711,8 +800,14 @@ def _safe_reconcile() -> None:
 
 def status() -> dict:
     with get_db() as conn:
+        year_start = f"{datetime.now().year}-01-01"
         pending = conn.execute(
             "SELECT COUNT(*) c FROM transactions WHERE sync_status='pending'"
+            " AND date >= ?", (year_start,)
+        ).fetchone()["c"]
+        prior_pending = conn.execute(
+            "SELECT COUNT(*) c FROM transactions WHERE sync_status='pending'"
+            " AND date < ?", (year_start,)
         ).fetchone()["c"]
         last_error = get_setting(conn, LAST_SYNC_ERROR)
         last_synced_at = get_setting(conn, LAST_SYNC_AT)
@@ -720,6 +815,7 @@ def status() -> dict:
     return {
         "enabled": sync_enabled(),
         "pending": pending,
+        "prior_pending": prior_pending,
         "last_error": last_error,
         "last_synced_at": last_synced_at,
         "last_synced_count": last_synced_count,

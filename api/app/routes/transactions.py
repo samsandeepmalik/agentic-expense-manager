@@ -38,6 +38,7 @@ class TransactionIn(BaseModel):
     loan: bool = False
     receipt_link: str | None = None
     confirm_duplicate: bool = False
+    taxable: bool | None = None
 
 
 class TransactionPatch(BaseModel):
@@ -50,6 +51,7 @@ class TransactionPatch(BaseModel):
     description: str | None = None
     notes: str | None = None
     loan: bool | None = None
+    taxable: bool | None = None
     receipt_link: str | None = None  # explicitly nullable — null clears the link
 
     @field_validator("date", "type", "total", "merchant", "description", "notes",

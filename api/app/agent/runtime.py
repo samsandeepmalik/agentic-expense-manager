@@ -200,4 +200,4 @@ async def run_to_completion(session: Session, text: str) -> str:
             error = event.get("error")
     if error:
         return f"Sorry, something went wrong: {error}"
-    return final or "Done."
+    return final or "Sorry, I didn't get a reply — please check whether that went through before retrying."

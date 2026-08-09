@@ -33,7 +33,7 @@ def test_sync_failure_recorded(conn, db_path, monkeypatch):
 
     def boom():
         raise RuntimeError("sheet quota")
-    monkeypatch.setattr(sync, "reconcile", boom)
+    monkeypatch.setattr(sync, "_auto_reconcile", boom)
     sync._safe_reconcile()
     rows = audit.recent(conn)
     assert rows[0]["event"] == "sync_failed"

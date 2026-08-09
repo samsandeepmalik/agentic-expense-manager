@@ -12,7 +12,7 @@ from app.services import transactions as svc
 
 
 def _expense(conn, **o):
-    data = {"date": "2026-06-05", "type": "expense", "category": "Groceries",
+    data = {"date": date.today().isoformat(), "type": "expense", "category": "Groceries",
             "total": 50.0, "merchant": "m"}
     data.update(o)
     return svc.create_transaction(conn, data)

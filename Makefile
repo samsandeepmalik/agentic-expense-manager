@@ -1,5 +1,11 @@
 .DEFAULT_GOAL := help
-.PHONY: help start stop restart cleanup logs logs-api logs-web status dev-api dev-web
+.PHONY: help start stop restart cleanup logs logs-api logs-web status dev-api dev-web \
+        deploy bootstrap
+
+# --- Oracle Cloud config (override on CLI: make deploy ORACLE_IP=1.2.3.4) -----
+ORACLE_IP   ?= REPLACE_WITH_IP
+ORACLE_USER ?= ubuntu
+ORACLE_HOST  = $(ORACLE_USER)@$(ORACLE_IP)
 
 help: ## Show this help
 	@echo "Expense Manager — available commands:"
@@ -50,3 +56,21 @@ dev-api: ## Run API locally with hot reload (poetry install --no-root, libmagic)
 
 dev-web: ## Run web UI dev server locally (npm install first)
 	cd web && npm run dev
+
+# --- Remote deployment — run these FROM your Mac ---------------------------
+# On the VM itself, use the same local targets: make start / stop / restart / logs
+
+deploy: ## [Mac] Sync code to Oracle VM + restart prod stack (set ORACLE_IP=x.x.x.x)
+	@if [ "$(ORACLE_IP)" = "REPLACE_WITH_IP" ]; then \
+		echo "Error: set ORACLE_IP — e.g.  make deploy ORACLE_IP=1.2.3.4"; exit 1; fi
+	rsync -az --delete \
+		--exclude '.git' --exclude 'data/' \
+		--exclude 'web/node_modules' --exclude '**/__pycache__' \
+		--exclude 'api/.venv' --exclude '*.pyc' \
+		. $(ORACLE_HOST):~/app/
+	ssh $(ORACLE_HOST) "cd ~/app && make restart"
+
+bootstrap: ## [Mac] Run first-time setup on Oracle VM (set ORACLE_IP=x.x.x.x)
+	@if [ "$(ORACLE_IP)" = "REPLACE_WITH_IP" ]; then \
+		echo "Error: set ORACLE_IP — e.g.  make bootstrap ORACLE_IP=1.2.3.4"; exit 1; fi
+	ssh $(ORACLE_HOST) "bash -s" < scripts/bootstrap.sh

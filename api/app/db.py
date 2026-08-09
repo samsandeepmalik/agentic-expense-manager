@@ -208,6 +208,9 @@ def init_db() -> None:
         audit_cols = {r["name"] for r in conn.execute("PRAGMA table_info(audit_log)")}
         if "profile_id" not in audit_cols:
             conn.execute("ALTER TABLE audit_log ADD COLUMN profile_id INTEGER")
+        # Migration: per-transaction taxable override (NULL = use category default)
+        if "taxable" not in columns:
+            conn.execute("ALTER TABLE transactions ADD COLUMN taxable INTEGER DEFAULT NULL")
     _migrate_profiles()  # own connection: PRAGMA fk=OFF needs autocommit, not get_db's txn
 
 

@@ -1,6 +1,6 @@
 # Development
 
-**Dev setup, test conventions, API surface, and how-to guides.** For system design and diagrams see [Architecture](architecture.md); for PR guidelines see [Contributing](../CONTRIBUTING.md).
+**Dev setup, test conventions, API surface, and how-to guides.** For system design and diagrams see [Architecture](architecture.md); for PR guidelines see [Contributing](../CONTRIBUTING.md); for deploying to Oracle Cloud free tier see [Deployment](deployment/oracle-cloud-free-tier.md).
 
 *Read this when:* setting up a local dev environment · adding an endpoint, agent tool, or OCR provider · writing or debugging tests
 

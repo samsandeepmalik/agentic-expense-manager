@@ -1,3 +1,5 @@
+from datetime import date
+
 from app.services import transactions as svc
 
 
@@ -78,7 +80,7 @@ def _parent_child(conn, parent="Food", child="Snacks", budget=300.0):
 
 def test_budget_spent_includes_subcategory_spend(conn):
     _parent_child(conn)
-    _create(conn, category="Snacks", total=50.0)   # recorded under the child
+    _create(conn, category="Snacks", total=50.0, date=date.today().isoformat())
     data = svc.dashboard_data(conn, None)
     food = next(b for b in data["budgets"] if b["name"] == "Food")
     assert food["spent"] == 50.0   # child spend rolls into the parent budget
@@ -86,7 +88,7 @@ def test_budget_spent_includes_subcategory_spend(conn):
 
 def test_pie_rolls_subcategory_into_parent(conn):
     _parent_child(conn)
-    _create(conn, category="Snacks", total=50.0)
+    _create(conn, category="Snacks", total=50.0, date=date.today().isoformat())
     data = svc.dashboard_data(conn, None)
     assert data["by_category"].get("Food") == 50.0
     assert "Snacks" not in data["by_category"]   # not a separate slice
@@ -114,6 +116,13 @@ def test_create_by_category_id_is_unambiguous(conn):
         "total": 100.0, "merchant": "x"})
     assert txn["category_id"] == child["id"]
     assert txn["counted"] == 50.0   # used the CHILD's 50% — not the top-level
+
+
+def test_taxable_override_false_skips_tax_on_taxable_category(conn):
+    # Groceries is taxable (GST+QST), but explicit taxable=False suppresses all tax.
+    txn = _create(conn, taxable=False)
+    assert txn["tax_breakdown"] == {}
+    assert txn["amount"] == txn["total"]
 
 
 def test_bulk_recategorize_still_works(conn):

@@ -11,8 +11,17 @@ function periodOptions(): { value: string; label: string }[] {
     const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     options.push({ value, label: d.toLocaleString("en", { month: "long", year: "numeric" }) });
   }
-  return [...options, { value: "last3", label: "Last 3 months" },
-          { value: "last6", label: "Last 6 months" }, { value: "ytd", label: "Year to date" }];
+  options.push(
+    { value: "last3", label: "Last 3 months" },
+    { value: "last6", label: "Last 6 months" },
+    { value: "ytd", label: "Year to date" },
+  );
+  // Year presets: current year + 4 prior years
+  for (let y = now.getFullYear(); y >= now.getFullYear() - 4; y--) {
+    options.push({ value: `${y}-01-01:${y}-12-31`, label: String(y) });
+  }
+  options.push({ value: "custom", label: "Custom range…" });
+  return options;
 }
 
 export function TopBar({ period, onPeriod }:
@@ -27,7 +36,7 @@ export function TopBar({ period, onPeriod }:
     onSuccess: () => queryClient.invalidateQueries() });  // everything is per-profile
   const active = profiles.data?.find((p) => p.active);
   const sync = useQuery({ queryKey: ["sync"], refetchInterval: 30000,
-    queryFn: () => get<{ enabled: boolean; pending: number }>("/api/sync/status") });
+    queryFn: () => get<{ enabled: boolean; pending: number; prior_pending: number }>("/api/sync/status") });
   const links = [["/", "Dashboard"], ["/transactions", "Transactions"],
                  ["/chat", "Chat"], ["/settings", "Settings"]] as const;
   return (
@@ -41,9 +50,9 @@ export function TopBar({ period, onPeriod }:
       </nav>
       <span className="grow" />
       {(profiles.data?.length ?? 0) > 1 && (
-        <select value={active?.id ?? 1}
+        <select value={active?.id ?? profiles.data?.[0]?.id}
                 onChange={(e) => activate.mutate(Number(e.target.value))}>
-          {profiles.data!.map((p) => (
+          {profiles.data?.map((p) => (
             <option key={p.id} value={p.id}>
               {p.kind === "incorporation" ? "🏢" : "👤"} {p.name}</option>))}
         </select>)}
@@ -55,9 +64,13 @@ export function TopBar({ period, onPeriod }:
               onClick={toggle}>
         {theme === "light" ? "☾" : "☀"}</button>
       <span className="syncdot"
-            title={sync.data?.enabled ? `${sync.data.pending} pending` : "Google sync off"}
+            title={sync.data?.enabled
+              ? [sync.data.pending ? `${sync.data.pending} pending` : "",
+                 sync.data.prior_pending ? `${sync.data.prior_pending} prior-year pending (use Resync)` : ""]
+                  .filter(Boolean).join(", ") || "Synced"
+              : "Google sync off"}
             data-state={!sync.data || !sync.data.enabled ? "off"
-              : sync.data.pending ? "pending" : "ok"} />
+              : (sync.data.pending || sync.data.prior_pending) ? "pending" : "ok"} />
     </header>
   );
 }

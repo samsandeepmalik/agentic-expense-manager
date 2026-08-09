@@ -3,6 +3,7 @@ import json
 
 from app.db import get_db
 from app.services import imports as imp_svc
+from app.services import profiles as prof_svc
 
 LINK = "https://drive.google.com/file/d/1AbCdEfGhIjK/view"
 SOURCE = "https://drive.google.com/file/d/SOURCE_FILE/view"
@@ -123,3 +124,69 @@ def test_set_source_link_persists_on_import(db_path):
 def test_set_source_link_missing_id_is_noop(db_path):
     """Calling set_source_link with a non-existent id must not raise."""
     imp_svc.set_source_link(99999, SOURCE)  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# create_transaction(import_id=): manual record after skipping approve_import
+# still inherits the statement's source_link, mirroring approve_import's
+# own row-level fallback.
+# ---------------------------------------------------------------------------
+
+def _seed_import(conn, profile_id=None, source_link=SOURCE):
+    cur = conn.execute(
+        "INSERT INTO imports(filename, profile_id, status, rows, source_link) "
+        "VALUES ('bank.csv', ?, 'review', '[]', ?)",
+        (profile_id, source_link))
+    return cur.lastrowid
+
+
+def test_create_transaction_with_import_id_inherits_source_link(db_path):
+    from app.services import transactions as txn_svc
+    with get_db() as conn:
+        pid = prof_svc.active_id(conn)
+        import_id = _seed_import(conn, profile_id=pid)
+    with get_db() as conn:
+        txn = txn_svc.create_transaction(conn, {
+            "date": "2026-06-01", "type": "expense", "category": "Dining",
+            "total": 12.0, "import_id": import_id})
+    assert txn["receipt_link"] == SOURCE
+    assert txn["external_ref"] == f"import:{import_id}:manual"
+
+
+def test_create_transaction_with_import_id_keeps_explicit_receipt_link(db_path):
+    from app.services import transactions as txn_svc
+    with get_db() as conn:
+        pid = prof_svc.active_id(conn)
+        import_id = _seed_import(conn, profile_id=pid)
+    with get_db() as conn:
+        txn = txn_svc.create_transaction(conn, {
+            "date": "2026-06-01", "type": "expense", "category": "Dining",
+            "total": 12.0, "import_id": import_id, "receipt_link": LINK})
+    assert txn["receipt_link"] == LINK
+
+
+def test_create_transaction_with_import_id_cross_profile_skips_attach(db_path):
+    from app.services import transactions as txn_svc
+    with get_db() as conn:
+        other = conn.execute(
+            "INSERT INTO profiles(name, kind) VALUES ('Incorp','incorporation')"
+        ).lastrowid
+        import_id = _seed_import(conn, profile_id=other)  # belongs to a different book
+    with get_db() as conn:
+        txn = txn_svc.create_transaction(conn, {
+            "date": "2026-06-01", "type": "expense", "category": "Dining",
+            "total": 12.0, "import_id": import_id})  # recorded to the active book
+    assert txn["receipt_link"] is None
+    assert txn["external_ref"] == f"import:{import_id}:manual"  # audit ref kept regardless
+
+
+def test_create_transaction_unknown_import_id_raises(db_path):
+    from app.errors import AppError
+    from app.services import transactions as txn_svc
+    import pytest
+    with get_db() as conn:
+        with pytest.raises(AppError) as exc:
+            txn_svc.create_transaction(conn, {
+                "date": "2026-06-01", "type": "expense", "category": "Dining",
+                "total": 12.0, "import_id": 99999})
+    assert exc.value.code == "import_not_found"
