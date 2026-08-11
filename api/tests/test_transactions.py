@@ -50,6 +50,23 @@ def test_list_filters(conn):
     assert len(june) == 2
 
 
+def test_list_filters_by_logged_date_not_expense_date(conn):
+    """logged_start/logged_end filter on created_at (when the row was recorded),
+    independent of `date` (the expense/income date the user entered)."""
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).date().isoformat()
+    old_expense = _create(conn, date="2026-01-15", merchant="Metro")  # entered today
+    backdated_log = _create(conn, date="2026-06-20", merchant="Costco")  # logged last month
+    conn.execute("UPDATE transactions SET created_at='2026-07-01 00:00:00' WHERE id=?",
+                 (backdated_log["id"],))
+
+    logged_today = svc.list_transactions(conn, logged_start=today, logged_end=today)
+    assert [t["merchant"] for t in logged_today] == ["Metro"]
+
+    by_expense_date = svc.list_transactions(conn, start="2026-01-01", end="2026-01-31")
+    assert [t["merchant"] for t in by_expense_date] == ["Metro"]  # unaffected by created_at
+
+
 def test_search_q_matches_notes(conn):
     _create(conn, merchant="Metro", notes="reimbursable client lunch")
     _create(conn, merchant="Costco", notes="")

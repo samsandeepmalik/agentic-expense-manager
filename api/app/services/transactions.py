@@ -156,6 +156,7 @@ def preview_transaction(conn: sqlite3.Connection, data: dict) -> dict:
 
 
 def list_transactions(conn, *, start: str | None = None, end: str | None = None,
+                      logged_start: str | None = None, logged_end: str | None = None,
                       type_: str | None = None, category: str | None = None,
                       q: str | None = None, limit: int = 500, offset: int = 0,
                       profile_id: int | None = None) -> list[dict]:
@@ -167,6 +168,13 @@ def list_transactions(conn, *, start: str | None = None, end: str | None = None,
         sql += " AND t.date >= ?"; params.append(start)
     if end:
         sql += " AND t.date <= ?"; params.append(end)
+    # logged_start/end filter by created_at (when the row was recorded) —
+    # distinct from date (the expense/income date the user entered). Lets the
+    # agent answer "what did I log today" for backdated WhatsApp entries.
+    if logged_start:
+        sql += " AND date(t.created_at) >= ?"; params.append(logged_start)
+    if logged_end:
+        sql += " AND date(t.created_at) <= ?"; params.append(logged_end)
     if type_:
         sql += " AND t.type = ?"; params.append(type_)
     if category:

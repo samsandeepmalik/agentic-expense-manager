@@ -83,8 +83,14 @@ RECORD_TRANSACTION_SCHEMA = {
 QUERY_TRANSACTIONS_SCHEMA = {
     "type": "object",
     "properties": {
-        "start_date": {"type": "string", "description": "YYYY-MM-DD inclusive"},
-        "end_date": {"type": "string", "description": "YYYY-MM-DD inclusive"},
+        "start_date": {"type": "string", "description": "YYYY-MM-DD inclusive. Filters by the "
+                      "transaction's own expense/income date, NOT when it was recorded."},
+        "end_date": {"type": "string", "description": "YYYY-MM-DD inclusive (expense/income date)"},
+        "logged_start": {"type": "string", "description": "YYYY-MM-DD inclusive. Filters by when "
+                         "the transaction was actually recorded (e.g. via WhatsApp today for an "
+                         "older expense). Use this — not start_date — for 'what did I log/add/enter "
+                         "today', since the user may be backdating the expense date itself."},
+        "logged_end": {"type": "string", "description": "YYYY-MM-DD inclusive (date recorded)"},
         "type": {"type": "string", "enum": ["income", "expense"]},
         "category": {"type": "string"},
         "q": {"type": "string", "description": "Full-text search across merchant, description, notes"},
@@ -316,6 +322,7 @@ def build_tools(channel: str, ui_sink: UiSink, source: str) -> list[AgentTool]:
                 with get_db() as conn:
                     return txn_svc.list_transactions(
                         conn, start=params.get("start_date"), end=params.get("end_date"),
+                        logged_start=params.get("logged_start"), logged_end=params.get("logged_end"),
                         type_=params.get("type"), category=params.get("category"),
                         q=params.get("q"), profile_id=_resolve_pid(conn, params))
             rows = await asyncio.to_thread(work)

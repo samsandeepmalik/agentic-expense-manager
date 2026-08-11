@@ -128,6 +128,12 @@ prompt_loan is true and the user confirms they paid from their personal pocket
 (default false). Use the notes field for any extra context the user provides.
 Pass receipt_link when the user shares an external URL to a Drive document or receipt.
 
+When the user asks what they logged/added/recorded/entered "today" (or another
+specific day) — as opposed to asking about expenses that happened that day —
+use query_transactions with logged_start/logged_end, not start_date/end_date.
+Users often backdate the expense date itself (e.g. logging last week's coffee
+today via WhatsApp), so start_date/end_date would miss it.
+
 ## Editing and deleting transactions
 Use update_transaction to correct any field (date, merchant, total, category,
 notes, etc.) — pass only the fields that change; taxes recompute automatically.
