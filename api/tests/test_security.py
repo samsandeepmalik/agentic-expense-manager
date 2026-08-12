@@ -94,7 +94,7 @@ def test_chat_upload_too_large_returns_413(app_with_key):
     resp = app_with_key.post(
         "/api/chat/sessions/ui:testsession/messages",
         data={"message": "hi"},
-        files={"file": ("big.pdf", BytesIO(big_data), "application/pdf")},
+        files={"files": ("big.pdf", BytesIO(big_data), "application/pdf")},
         headers={"X-Api-Key": "test-secret-key"},
     )
     assert resp.status_code == 413

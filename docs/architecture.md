@@ -141,9 +141,9 @@ The tool set:
 
 | Tool | Notes |
 |---|---|
-| `record_transaction` | total only (taxes derived server-side); also `notes`, `receipt_link`; on a likely duplicate returns `{duplicate: true, …}` instead of saving — re-call with `confirm_duplicate: true` to override |
+| `record_transaction` | total only (taxes derived server-side); also `notes`, `receipt_link`; on a likely duplicate returns `{duplicate: true, …}` instead of saving — re-call with `confirm_duplicate: true` to override. Optional `import_id`: when recording manually instead of `approve_import`, auto-attaches that import's `source_link` as `receipt_link` (same-profile only) and stamps `external_ref` for audit |
 | `update_transaction` / `delete_transaction` | edit or remove by id; updatable fields include date, merchant, total, category, notes, `receipt_link` (cannot be cleared to null via PATCH — omit the field to leave it unchanged) |
-| `query_transactions` | date / type / category / text / loan filters |
+| `query_transactions` | date / type / category / text / loan filters on the expense/income `date`; separate `logged_start`/`logged_end` filter on `created_at` — for "what did I log/record today" when the expense date itself may be backdated |
 | `get_summary` | dashboard-style aggregates |
 | `manage_categories` / `manage_budgets` | set categories / per-category budgets |
 | `manage_recurring` | list / create / update (edit + pause/resume via `active`) / delete |
@@ -195,6 +195,25 @@ pipeline (`parse_with_agent`, `dedup.flag_duplicates`, `approve_import`), so
 dedup, audit (`channel='chat'`), idempotency and per-row fault tolerance all
 apply unchanged. WhatsApp is out of scope (its document handling only carries
 pdf/image; see `docs/design/2026-06-15-chat-statement-import.md`).
+
+**Multi-receipt attachment (web only).** A chat message can carry up to 10
+files at once, but only when every file is a receipt (image or PDF) — a
+statement extension (`.csv/.xlsx/.xls`) mixed into a multi-file selection is
+rejected client- and server-side (`400 mixed_statement`); a single statement
+file still goes through the flow above unchanged. For `len(files) > 1`, the
+route skips `classify_and_start` entirely (no statement classification, even
+for a PDF that would otherwise qualify) and calls `receipts.save_and_ocr` in
+a loop, one file at a time, emitting an SSE `status` event ("Reading receipt
+N of M…") before each — a batch can take 30–60s+, so per-file progress
+replaces what would otherwise be a long silent wait. A per-file OCR failure
+is inlined into that file's section (not fatal to the batch). Once every
+file is OCR'd, `receipts.compose_batch_prompt` composes one prompt with N
+labeled sections; the agent extracts fields for every receipt, presents ONE
+numbered summary (flagging likely duplicates), waits for a single
+confirmation covering all items, then calls `record_transaction` once per
+item — `confirm_duplicate=true` only for items already flagged that the user
+didn't ask to drop. A failure recording one item does not stop the rest;
+the agent reports combined results (ids + failures) after all calls.
 
 ## Duplicate detection
 
@@ -462,6 +481,11 @@ flowchart LR
   an image receipt, the preview endpoint returns the original.
 - The WhatsApp channel accepts both **image messages** and **PDF document
   messages** — both feed the same pipeline.
+- `build_receipt_prompt` (single file) and the multi-receipt batch path (web
+  only, see Chat statement import above) share the same per-file save+OCR
+  step (`receipts.save_and_ocr`) — the batch path just calls it N times in a
+  loop instead of once, reporting progress between calls, then composes all
+  N results into one prompt (`receipts.compose_batch_prompt`).
 
 ## Profile scoping
 

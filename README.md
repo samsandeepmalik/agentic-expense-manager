@@ -28,7 +28,7 @@ Income and expense tracker with a Claude agent, receipt OCR, a warm web dashboar
 | **Idempotent one-way Google sync** | Writes set a dirty flag; a debounced worker reconciles each profile's Sheet/Drive by mapping transaction id → row. Missing rows are removed via `deleteDimension`, not blanked. A **Re-sync Now** path (`force_full=True`) clears and rewrites the active profile's sheet in date order — restoring deleted rows and fixing ordering drift without touching other profiles. Trashed or deleted spreadsheets are auto-detected via the Drive API and recreated. |
 | **Crash-safe SQLite migrations** | Idempotent migrations with atomic table rebuilds that recover orphaned scratch tables from an interrupted prior run. |
 | **Profiles as full data partitions** | Each profile owns its transactions, categories, tax profile, Google Sheet, and Drive folder; every query is scoped to the active profile. |
-| **Tested, not asserted** | 268+ backend tests including an adversarial sync suite designed to break reconciliation, with dependency-injected seams instead of internal patching. |
+| **Tested, not asserted** | 345+ backend tests including an adversarial sync suite designed to break reconciliation, with dependency-injected seams instead of internal patching. |
 
 See [docs/architecture.md](docs/architecture.md) for diagrams and the reasoning behind these decisions.
 
@@ -41,7 +41,7 @@ See [docs/architecture.md](docs/architecture.md) for diagrams and the reasoning 
 | **Profiles** | Separate books per context (Personal, Incorporation, etc.). Transactions, recurring rules, categories, tax profile, dashboard, imports, audit feed, Google sheet, and Drive folder are all strictly scoped to the active profile. |
 | **Dashboard** | Income/expenses/net, 6-month trend, category pie, per-category budgets with 90% alerts, quick-add modal with live tax preview, and a duplicate-add warning. |
 | **Tax back-calculation** | Enter total paid; GST/QST/HST are derived server-side from the category's taxable flag and the active tax profile (Quebec / Ontario / Alberta presets). |
-| **Chat agent** | Natural-language entry, receipt photo/PDF, or CSV/XLSX/PDF statement — streaming replies with inline generative charts and tables. Confirms profile, category/sub-category, and type before recording. Drop a statement and it reviews rows, proposes categories, and records with two confirmation gates. |
+| **Chat agent** | Natural-language entry, receipt photo/PDF (attach up to 10 at once — one summary, one confirm, all recorded together), or CSV/XLSX/PDF statement — streaming replies with inline generative charts and tables. Confirms profile, category/sub-category, and type before recording. Drop a statement and it reviews rows, proposes categories, and records with two confirmation gates. |
 | **WhatsApp** | Pair via QR, then talk to the agent in "Message yourself". Sender allowlist, weekly summary, strangers silently ignored. |
 | **Sub-categories** | One level of nesting under any category (e.g. Groceries → Produce); unique per (name, profile, parent); exposed in REST, the agent, and Settings. |
 | **Receipt OCR** | Images and PDF files (PyMuPDF renders each page to PNG). Selectable provider: NVIDIA PaddleOCR, Claude vision, or OpenAI vision. Works from web chat and WhatsApp. |

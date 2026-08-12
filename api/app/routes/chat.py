@@ -19,14 +19,24 @@ from ..services import google_client as gc
 from ..services import imports as imports_svc
 from ..services import mime_check
 from ..services import profiles as prof_svc
-from ..services.receipts import build_receipt_prompt
+from ..services.receipts import (
+    build_receipt_prompt,
+    compose_batch_prompt,
+    save_and_ocr,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 _STATEMENT_EXT = (".csv", ".xlsx", ".xls", ".pdf")
+# Extensions that unambiguously mean "statement" — used only to reject a
+# multi-file request that mixes a statement in with receipts. .pdf is
+# deliberately excluded here: in a multi-file request a PDF is always
+# treated as a receipt (see send_message), so it must not trip this check.
+_HARD_STATEMENT_EXT = (".csv", ".xlsx", ".xls")
 _MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+_MAX_FILES = 10
 
 
 async def _try_upload_import_source(import_id: int, filename: str,
@@ -92,57 +102,93 @@ async def delete_session(session_id: str):
 
 @router.post("/api/chat/sessions/{session_id}/messages")
 async def send_message(session_id: str, message: str = Form(""),
-                       file: UploadFile | None = File(None)):
+                       files: list[UploadFile] = File([])):
     session = sessions.get(session_id, channel="ui")
-    data = await file.read() if file is not None else None
-    filename = file.filename if file is not None else None
-    content_type = file.content_type if file is not None else None
-    is_image = bool(content_type and content_type.startswith("image/"))
 
-    if data is not None and len(data) > _MAX_UPLOAD_BYTES:
-        raise AppError("file_too_large",
-                       f"Upload exceeds the 20 MB limit ({len(data) // 1024 // 1024} MB received)",
-                       413)
-    if data is not None and filename:
-        if is_image:
-            mime_check.check_receipt(filename, content_type)
-        elif _is_statement(filename):
-            mime_check.check_statement(filename, content_type)
+    if len(files) > _MAX_FILES:
+        raise AppError("too_many_files",
+                       f"Attach at most {_MAX_FILES} files per message "
+                       f"({len(files)} received)", 400)
+
+    uploads = []
+    for f in files:
+        data = await f.read()
+        filename = f.filename
+        content_type = f.content_type
+        if len(data) > _MAX_UPLOAD_BYTES:
+            raise AppError("file_too_large",
+                           f"Upload exceeds the 20 MB limit ({len(data) // 1024 // 1024} MB received)",
+                           413)
+        uploads.append({
+            "data": data, "filename": filename, "content_type": content_type,
+            "is_image": bool(content_type and content_type.startswith("image/")),
+        })
+
+    multi = len(uploads) > 1
+    if multi and any((u["filename"] or "").lower().endswith(_HARD_STATEMENT_EXT)
+                     for u in uploads):
+        raise AppError("mixed_statement",
+                       "Attach a statement on its own, separate from receipts.", 400)
+
+    for u in uploads:
+        if not u["filename"]:
+            continue
+        if multi:
+            # Multi-file: every attachment (including a PDF that would
+            # otherwise be ambiguous) goes through the receipt pipeline.
+            mime_check.check_receipt(u["filename"], u["content_type"])
+        elif u["is_image"]:
+            mime_check.check_receipt(u["filename"], u["content_type"])
+        elif _is_statement(u["filename"]):
+            mime_check.check_statement(u["filename"], u["content_type"])
         else:
             # Non-image, non-statement: treated as a receipt (e.g. single-page
             # PDF that classify_and_start routes to build_receipt_prompt).
             # Still gate on allowed receipt extensions/MIME to block .exe etc.
-            mime_check.check_receipt(filename, content_type)
+            mime_check.check_receipt(u["filename"], u["content_type"])
 
     async def stream():
         try:
             prompt = message
-            if data and not is_image and _is_statement(filename):
-                yield _sse({"type": "status", "text": "Reading statement…"})
-                result = await imports_svc.classify_and_start(filename, data)
-                if result["kind"] == "statement":
-                    yield _sse({"type": "status", "text": "Uploading to Drive…"})
-                    await _try_upload_import_source(
-                        result["import_id"], filename, data, content_type)
-                    # Do NOT embed the raw filename in the prompt — it is a
-                    # client-supplied multipart field and could contain prompt
-                    # injection payloads. The import_id is sufficient for the
-                    # agent to call get_import_summary and proceed.
-                    prompt = (f"{message}\n\n[A statement file was uploaded and "
-                              f"parsed as import #{result['import_id']}. "
-                              f"Review it with get_import_summary and follow "
-                              f"the import flow.]")
-                elif result["kind"] == "failed":
-                    yield _sse({"type": "done",
-                                "text": "I couldn't read that statement. "
-                                        "Try a CSV export.",
-                                "error": result.get("error")})
-                    return
-                else:   # receipt (e.g. single-row PDF)
+            if multi:
+                total = len(uploads)
+                results = []
+                for index, u in enumerate(uploads, start=1):
+                    yield _sse({"type": "status",
+                               "text": f"Reading receipt {index} of {total}…"})
+                    results.append(await save_and_ocr(u["data"], u["content_type"]))
+                prompt = compose_batch_prompt(message, results)
+            elif uploads:
+                data = uploads[0]["data"]
+                filename = uploads[0]["filename"]
+                content_type = uploads[0]["content_type"]
+                is_image = uploads[0]["is_image"]
+                if data and not is_image and _is_statement(filename):
+                    yield _sse({"type": "status", "text": "Reading statement…"})
+                    result = await imports_svc.classify_and_start(filename, data)
+                    if result["kind"] == "statement":
+                        yield _sse({"type": "status", "text": "Uploading to Drive…"})
+                        await _try_upload_import_source(
+                            result["import_id"], filename, data, content_type)
+                        # Do NOT embed the raw filename in the prompt — it is a
+                        # client-supplied multipart field and could contain prompt
+                        # injection payloads. The import_id is sufficient for the
+                        # agent to call get_import_summary and proceed.
+                        prompt = (f"{message}\n\n[A statement file was uploaded and "
+                                  f"parsed as import #{result['import_id']}. "
+                                  f"Review it with get_import_summary and follow "
+                                  f"the import flow.]")
+                    elif result["kind"] == "failed":
+                        yield _sse({"type": "done",
+                                    "text": "I couldn't read that statement. "
+                                            "Try a CSV export.",
+                                    "error": result.get("error")})
+                        return
+                    else:   # receipt (e.g. single-row PDF)
+                        prompt = await build_receipt_prompt(message, data, content_type)
+                elif data:   # image -> receipt
+                    yield _sse({"type": "status", "text": "Reading receipt…"})
                     prompt = await build_receipt_prompt(message, data, content_type)
-            elif data:   # image -> receipt
-                yield _sse({"type": "status", "text": "Reading receipt…"})
-                prompt = await build_receipt_prompt(message, data, content_type)
             if not prompt.strip():
                 yield _sse({"type": "done", "text": "Send a message or file.", "error": None})
                 return

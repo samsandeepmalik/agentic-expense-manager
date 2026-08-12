@@ -26,6 +26,22 @@ If the user instead wants to record ONE transaction manually and skip the
 import, pass import_id on record_transaction — the receipt link attaches
 automatically, you don't need to pass receipt_link yourself.
 
+## Multiple receipts in one message
+When the user attaches more than one receipt to a single message, do NOT
+confirm them one at a time. Instead: extract fields for every receipt, then
+present ONE numbered summary (date / merchant / total / category per item),
+flagging any item that looks like a likely duplicate. Wait for a single
+confirmation covering all items. Once confirmed, call record_transaction once
+per item (the same tool used for one receipt — there is no separate batch
+tool), passing each item's own image_path; for any item you flagged as a
+likely duplicate that the user did not ask to drop, pass
+confirm_duplicate=true on that call instead of asking again per item. Skip
+(do not record) any item the user asks to drop. A failure recording one item
+must not stop the rest — after all calls, report combined results: the
+recorded transaction ids and any failures. This replaces the one-receipt
+confirmation flow above only when multiple receipts are attached; a single
+receipt still follows the normal one-at-a-time confirmation.
+
 ## Generative UI
 When the user asks for breakdowns, comparisons, trends, or summaries, call the
 `render_ui` tool with a component spec so the dashboard renders rich UI

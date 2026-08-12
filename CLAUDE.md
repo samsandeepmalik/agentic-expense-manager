@@ -59,7 +59,10 @@ api/app/
                            categories: one-level nesting via parent_id (0=top);
                            UNIQUE(name, profile_id, parent_id)
     profiles.py            CRUD + active_id(conn) + update_profile(prompt_loan); all services scope to active
-    receipts.py            OCR intake (image/PDF→prompt; PyMuPDF renders PDF pages to PNG) AND lazy Drive download
+    receipts.py            OCR intake (image/PDF→prompt; PyMuPDF renders PDF pages to PNG)
+                           AND lazy Drive download. save_and_ocr (per-file) +
+                           compose_batch_prompt/build_batch_receipt_prompt handle
+                           multi-receipt chat messages (progress reported per file)
     imports.py             statement upload → agent parses rows → review/approve.
                            classify_and_start routes a CHAT upload (receipt vs
                            statement); import_summary + remap_import drive the
@@ -88,7 +91,11 @@ api/app/
                            (chat statement import), render_ui (ui only).
                            EVERY data tool takes optional `profile` name → act on
                            another book WITHOUT switching active. record_transaction
-                           takes `confirm_duplicate` (override the dup warning)
+                           takes `confirm_duplicate` (override the dup warning) and
+                           `import_id` (auto-attach an import's receipt link when
+                           recording manually instead of approve_import). query
+                           takes `logged_start`/`logged_end` (created_at, not date)
+                           for "what did I log today" vs expense-date filters
     prompts.py             system prompt (channel-aware: ui vs whatsapp)
   channels/
     base.py                BaseChannelRegistry contract (main.py codes against this)
@@ -140,7 +147,17 @@ web/src/
   (`_try_upload_import_source`, silent on failure) and the Drive URL stored as
   `import.source_link`; at `approve_import` time, any row without its own
   `receipt_link` inherits `source_link` as its `receipt_link`. Agent replies
-  render as markdown (react-markdown + GFM).
+  render as markdown (react-markdown + GFM). Multiple receipts can be attached
+  to one message (web only, up to 10, receipts only — a statement stays
+  single-file): the agent OCRs each (status events report "Reading receipt N
+  of M…"), shows ONE numbered summary covering all of them, waits for a single
+  confirmation, then calls `record_transaction` once per item (passing
+  `confirm_duplicate=true` only for items already flagged as a likely
+  duplicate the user didn't drop). If the user skips approve_import to record
+  one transaction manually instead, pass `import_id` on `record_transaction` —
+  it auto-attaches the import's `source_link` as `receipt_link` (same-profile
+  only; cross-profile still tags `external_ref` for audit but never copies
+  the link).
 - **Import**: upload → agent structures rows → review grid (per-profile chooser,
   inline-edit category/sub/type/total/loan/notes/receipt_link, dup flag) →
   approve sends the edited rows. Grid fetches the target book's categories via
@@ -202,6 +219,12 @@ web/src/
 - Docker bakes the source into the image (only `./data` is bind-mounted) — code/
   migration changes need `make restart` (rebuild); a bare `docker restart` runs
   the STALE image. Symptom: behaviour unchanged after a "restart".
+- nginx (`web/nginx.conf`) sets `client_max_body_size 220M` on `/api/` — its
+  default (1M) rejects a multi-file chat upload (several receipt photos) well
+  under the app's own 10-file/20MB-per-file caps, with a bare `413` the API
+  never sees. Symptom: `docker compose logs api` shows nothing for the
+  request (check `logs web` instead — that's where the rejection is logged).
+  Keep this ahead of the app's own per-request ceiling if that cap changes.
 - Sheet TOTALS row is FROZEN at row 2 (header row 1, data row 3+); Sheets can only
   freeze from the top, so totals live at the top, not the bottom.
 - Duplicate rule lives ONLY in `dedup.find_duplicate` — change it there, nowhere

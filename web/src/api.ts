@@ -86,10 +86,10 @@ export const upload = <T,>(url: string, form: FormData) =>
   fetch(url, { method: "POST", body: form }).then((r) => handle<T>(r));
 
 export async function streamChat(sessionId: string, message: string,
-    file: File | null, onEvent: (e: ChatEvent) => void): Promise<void> {
+    files: File[], onEvent: (e: ChatEvent) => void): Promise<void> {
   const form = new FormData();
   form.set("message", message);
-  if (file) form.set("file", file);
+  for (const file of files) form.append("files", file);
   const response = await fetch(`/api/chat/sessions/${sessionId}/messages`,
     { method: "POST", body: form });
   if (!response.ok || !response.body) throw new Error(`chat failed (${response.status})`);

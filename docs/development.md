@@ -42,7 +42,7 @@ DB (schema + seeds recreate on boot).
 ## Test & build
 
 ```bash
-cd api && poetry run pytest -v        # backend suite (~268 tests, ~3s)
+cd api && poetry run pytest -v        # backend suite (~345 tests, ~6s)
 cd web && npm run build               # tsc --noEmit + vite build
 ```
 
@@ -143,7 +143,7 @@ bypass it); leave it off for batch/automated paths (recurring, import).
 | `GET/POST /api/tax-profiles` | tax profiles (activate) |
 | `GET/POST/PATCH/DELETE /api/recurring` | recurring rules |
 | `POST /api/imports` (optional `profile_id`) · `GET /{id}` · `POST /{id}/approve` | statement imports; `approve` accepts the edited review-grid `rows` (category/sub, type, total, loan, notes, receipt_link, skip). Chat-originated imports carry `channel='chat'` |
-| `GET/POST/DELETE /api/chat/sessions` · `POST .../messages` (SSE) | chat sessions; `messages` accepts a generic `file` (image → receipt OCR; CSV/XLSX/PDF → statement import, driven by the agent via the `get_import_summary`/`remap_import`/`approve_import` tools) |
+| `GET/POST/DELETE /api/chat/sessions` · `POST .../messages` (SSE) | chat sessions; `messages` accepts `files` (0+ `UploadFile`s, `multipart/form-data`, field name `files` — repeat it per file). One file: image/generic-PDF → receipt OCR, or CSV/XLSX/PDF → statement import (agent drives via `get_import_summary`/`remap_import`/`approve_import`). 2+ files: every file must be a receipt (image/PDF) — capped at 10 (`400 too_many_files`), a statement extension mixed in is rejected (`400 mixed_statement`) — each is OCR'd with a per-file SSE `status` event, then composed into one batch prompt |
 | `GET/POST /api/settings/ocr` | OCR provider selection |
 | `GET /api/sync/status` · `POST /api/sync/now` | Google sync |
 | `GET/POST /api/profiles` · `PATCH /{id}` · `POST /{id}/activate` · `DELETE /{id}` | profiles (separate books); `PATCH` updates `prompt_loan` flag |
@@ -186,6 +186,10 @@ hardcoded), so any file type stored as a receipt uploads correctly.
 - WhatsApp QR expired? Settings → Refresh QR (codes die ~20s after issue).
 - Agent misbehaving? The full prompt is in `app/agent/prompts.py`; tool
   results are JSON-serialized service returns.
+- Chat upload returns `413` with nothing logged by the API? Check
+  `docker compose logs web` (nginx), not `logs-api` — `web/nginx.conf`'s
+  `client_max_body_size` on `/api/` rejects the request before it reaches
+  the backend, so the app's own file-count/size validation never runs.
 
 ---
 

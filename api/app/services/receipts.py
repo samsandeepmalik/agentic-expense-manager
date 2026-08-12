@@ -36,9 +36,16 @@ def _pdf_to_page_images(data: bytes) -> list[bytes]:
     return images
 
 
-async def build_receipt_prompt(
-    user_text: str, image_bytes: bytes, mime_type: str
-) -> str:
+async def save_and_ocr(image_bytes: bytes, mime_type: str) -> dict:
+    """Save one receipt file to disk and OCR it.
+
+    Shared by build_receipt_prompt (one file) and build_batch_receipt_prompt
+    (N files) — the per-file work (save image, OCR, PDF page rendering) is
+    identical either way, only the prompt composition differs. Public (not
+    module-private) so a caller that wants per-file progress — the chat route,
+    for a multi-receipt message — can call it directly in its own loop instead
+    of going through build_batch_receipt_prompt's single opaque await.
+    """
     extension = (mime_type.split("/") + ["bin"])[1].split("+")[0]
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     filename = f"receipt-{timestamp}-{uuid.uuid4().hex[:6]}.{extension}"
@@ -71,21 +78,78 @@ async def build_receipt_prompt(
             ocr_text = ""
             ocr_error = str(exc)
 
+    return {"filename": filename, "image_path": image_path,
+            "ocr_text": ocr_text, "ocr_error": ocr_error}
+
+
+async def build_receipt_prompt(
+    user_text: str, image_bytes: bytes, mime_type: str
+) -> str:
+    result = await save_and_ocr(image_bytes, mime_type)
+
     parts = [
         "The user submitted a receipt image.",
         "",
         "OCR-extracted text from the receipt:",
         "---",
-        ocr_text or f"(OCR failed: {ocr_error})",
+        result["ocr_text"] or f"(OCR failed: {result['ocr_error']})",
         "---",
     ]
     if user_text.strip():
         parts.append(f'User note: "{user_text.strip()}"')
     parts.append(
         "Extract the transaction details (date, merchant, total incl. taxes), "
-        f"choose a category, and call record_transaction with image_path=\"{image_path}\"."
+        f"choose a category, and call record_transaction with image_path=\"{result['image_path']}\"."
     )
     return "\n".join(parts)
+
+
+def compose_batch_prompt(user_text: str, results: list[dict]) -> str:
+    """Build the batch prompt text from already-saved+OCR'd per-file results
+    (see save_and_ocr). Pure/sync — split out of build_batch_receipt_prompt so
+    a caller doing its own per-file loop (for progress reporting) can reuse
+    the composition step without re-running the OCR loop."""
+    parts = [f"The user submitted {len(results)} receipts in one message.", ""]
+    for number, result in enumerate(results, start=1):
+        parts.append(f"--- receipt {number} ({result['filename']}) ---")
+        parts.append("OCR-extracted text:")
+        parts.append(result["ocr_text"] or f"(OCR failed: {result['ocr_error']})")
+        parts.append(f'image_path: "{result["image_path"]}"')
+        parts.append("")
+    if user_text.strip():
+        parts.append(f'User note: "{user_text.strip()}"')
+        parts.append("")
+    parts.append(
+        "For EVERY receipt above, extract the transaction details (date, "
+        "merchant, total incl. taxes) and choose a category. Present ONE "
+        "numbered summary covering ALL receipts (date / merchant / total / "
+        "category per item), flagging any item that looks like a likely "
+        "duplicate. Wait for a single confirmation covering every item — do "
+        "not ask one-by-one. Once the user confirms, call record_transaction "
+        "once per item (the existing tool, not a new one), passing that "
+        "item's own image_path; for any item you flagged as a likely "
+        "duplicate that the user did not ask to drop, pass "
+        "confirm_duplicate=true on that call. Skip (do not record) any item "
+        "the user explicitly asks to drop. A failure recording one item must "
+        "not stop the rest — after all calls, report combined results: the "
+        "recorded transaction ids and any failures."
+    )
+    return "\n".join(parts)
+
+
+async def build_batch_receipt_prompt(
+    user_text: str, files: list[tuple[bytes, str]]
+) -> str:
+    """Compose a prompt covering N receipts submitted in one chat message.
+
+    Each file is saved + OCR'd independently (a failure on one does not drop
+    it from the batch — same fault-tolerant posture as the single-file path).
+    Convenience wrapper around save_and_ocr + compose_batch_prompt for callers
+    that don't need per-file progress; the chat route calls those directly
+    instead, to report progress between files.
+    """
+    results = [await save_and_ocr(data, mime) for data, mime in files]
+    return compose_batch_prompt(user_text, results)
 
 
 _FILE_ID_RES = (re.compile(r"/file/d/([A-Za-z0-9_-]+)"),

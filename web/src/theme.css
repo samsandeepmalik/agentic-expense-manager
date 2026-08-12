@@ -215,7 +215,53 @@ button.seg { border: var(--rule-w) solid var(--rule); }
 .md blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--rule);
   opacity: .85; }
 .md hr { border: none; border-top: 1px solid var(--hairline); margin: 10px 0; }
-.chat-inputrow { gap: 8px; padding-top: 10px; margin-top: 6px; border-top: 1px solid var(--hairline); }
+/* Composer: the ONE deliberate border-radius exception to the app's zero-radius
+   brutalist rule — a softer, pill-cornered card so the chat entry point reads
+   distinct from the ruled/square panels around it. box-shadow stays off (the
+   app's zero-shadow rule applies here too); border uses the lighter --hairline,
+   not --rule, to sit softer than the bordered cards elsewhere on the page. */
+.composer {
+  display: flex; flex-direction: column; gap: 8px; margin-top: 6px;
+  padding: 10px 12px; background: var(--bg); border: 1px solid var(--hairline);
+  border-radius: 22px; box-shadow: none;
+}
+.composer-thumbs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.composer-thumb {
+  position: relative; width: 52px; height: 52px; flex: 0 0 auto;
+  border: 1px solid var(--hairline); border-radius: 8px; overflow: hidden;
+}
+.composer-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.composer-thumb-generic {
+  width: 100%; height: 100%; display: flex; flex-direction: column; gap: 2px;
+  align-items: center; justify-content: center; padding: 2px; font-size: 16px;
+}
+.composer-thumb-name {
+  font-size: 8px; line-height: 1.1; text-align: center; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.composer-thumb-x {
+  position: absolute; top: -4px; right: -4px; width: 16px; height: 16px;
+  border-radius: 50%; border: 1px solid var(--rule); background: var(--ink);
+  color: var(--bg); font-size: 9px; line-height: 1; padding: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.composer-error { margin: 0; font-size: 11px; color: var(--accent); }
+.composer-textarea {
+  resize: none; border: none; background: transparent; color: var(--ink);
+  font-family: "Archivo", sans-serif; font-size: 14px; line-height: 1.4;
+  padding: 4px 2px; max-height: 132px; overflow-y: auto; outline: none;
+}
+.composer-textarea::placeholder { color: var(--muted); }
+.composer-actions { display: flex; align-items: center; gap: 8px; }
+.composer-attach, .composer-send {
+  width: 32px; height: 32px; flex: 0 0 auto; border-radius: 50%;
+  border: var(--rule-w) solid var(--rule); display: flex; align-items: center;
+  justify-content: center; cursor: pointer; font-size: 16px; padding: 0;
+  box-shadow: none;
+}
+.composer-attach { background: var(--bg); color: var(--ink); }
+.composer-send { background: var(--ink); color: var(--bg); }
+.composer-send:disabled { opacity: .4; cursor: default; }
 .fab {
   position: fixed; right: 24px; bottom: 24px; width: 54px; height: 54px;
   border: var(--rule-w) solid var(--rule); background: var(--ink); color: var(--bg);
