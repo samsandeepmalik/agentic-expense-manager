@@ -1,5 +1,8 @@
 """Tests for multi-file attachments on POST /api/chat/sessions/{id}/messages."""
 
+import asyncio
+import time
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -38,7 +41,7 @@ def test_more_than_ten_files_returns_400_too_many_files(monkeypatch):
 
 
 def test_ten_files_is_allowed(monkeypatch):
-    async def fake_ocr(data, content_type):
+    async def fake_ocr(data, content_type, **kwargs):
         return {"filename": "r.jpg", "image_path": "/tmp/r.jpg",
                "ocr_text": "text", "ocr_error": ""}
     monkeypatch.setattr(chat_routes, "save_and_ocr", fake_ocr)
@@ -57,7 +60,7 @@ def test_multi_file_emits_per_file_progress_status(monkeypatch):
     """Each file's OCR step reports its own progress ('Reading receipt N of
     M…'), not one static message for the whole batch — the wait for several
     receipts can run 30-60s+ and a static message reads as hung."""
-    async def fake_ocr(data, content_type):
+    async def fake_ocr(data, content_type, **kwargs):
         return {"filename": "r.jpg", "image_path": "/tmp/r.jpg",
                "ocr_text": "text", "ocr_error": ""}
     monkeypatch.setattr(chat_routes, "save_and_ocr", fake_ocr)
@@ -101,7 +104,7 @@ def test_two_xlsx_files_mixed_returns_400(monkeypatch):
 def test_multiple_images_go_through_batch_receipt_pipeline(monkeypatch):
     captured_call = {"ocr_calls": []}
 
-    async def fake_ocr(data, content_type):
+    async def fake_ocr(data, content_type, **kwargs):
         captured_call["ocr_calls"].append((data, content_type))
         return {"filename": "r.jpg", "image_path": "/tmp/r.jpg",
                "ocr_text": "text", "ocr_error": ""}
@@ -124,14 +127,18 @@ def test_multiple_images_go_through_batch_receipt_pipeline(monkeypatch):
     assert captured["prompt"] == "batch prompt text"
     assert captured_call["user_text"] == "two receipts"
     assert len(captured_call["results"]) == 2
-    assert captured_call["ocr_calls"][0] == (b"\xff\xd8\xff", "image/jpeg")
+    # Files OCR concurrently now, so call order isn't guaranteed — only that
+    # both were actually called (see test_multi_file_results_stay_in_attachment_order
+    # for the invariant that actually matters: final result ordering).
+    assert set(captured_call["ocr_calls"]) == {
+        (b"\xff\xd8\xff", "image/jpeg"), (b"\x89PNG", "image/png")}
 
 
 def test_pdf_in_multi_file_set_treated_as_receipt_not_statement(monkeypatch):
     """A PDF alongside another file in a multi-file request must NOT be
     classified as a statement (classify_and_start is asserted un-called by
     the fixture) — it goes through the batch receipt pipeline instead."""
-    async def fake_ocr(data, content_type):
+    async def fake_ocr(data, content_type, **kwargs):
         return {"filename": "receipt.pdf", "image_path": "/tmp/receipt.pdf",
                "ocr_text": "text", "ocr_error": ""}
     monkeypatch.setattr(chat_routes, "save_and_ocr", fake_ocr)
@@ -188,3 +195,61 @@ def test_single_statement_file_unaffected_by_multi_file_changes(monkeypatch):
                        files={"files": ("bank.csv", b"a,b\n1,2\n", "text/csv")})
     assert resp.status_code == 200
     assert "42" in captured["prompt"]
+
+
+def test_multi_file_ocr_runs_concurrently_across_files(monkeypatch):
+    """Files used to OCR one at a time — 10 receipts could take minutes.
+    They must run concurrently so wall time stays close to one file's
+    latency, not the sum of all of them."""
+    async def slow_ocr(data, content_type, **kwargs):
+        await asyncio.sleep(0.2)
+        return {"filename": "r.jpg", "image_path": "/tmp/r.jpg",
+               "ocr_text": "text", "ocr_error": ""}
+    monkeypatch.setattr(chat_routes, "save_and_ocr", slow_ocr)
+    monkeypatch.setattr(chat_routes, "compose_batch_prompt",
+                        lambda user_text, results: "prompt")
+
+    client, _ = _client(monkeypatch)
+    files = [("files", (f"r{i}.jpg", b"\xff\xd8\xff", "image/jpeg")) for i in range(6)]
+
+    start = time.monotonic()
+    resp = client.post("/api/chat/sessions/s1/messages",
+                       data={"message": "receipts"}, files=files)
+    elapsed = time.monotonic() - start
+
+    assert resp.status_code == 200
+    # Sequential would take ~1.2s (6 x 0.2s); concurrent stays well under that.
+    assert elapsed < 0.8
+
+
+def test_multi_file_results_stay_in_attachment_order_despite_concurrency(monkeypatch):
+    """Files complete OCR out of order (fast file finishes before a slow
+    earlier one) but compose_batch_prompt must still see them in the order
+    they were attached — "receipt 2" must always mean the 2nd file picked,
+    not the 2nd one to finish."""
+    async def ordered_slow_ocr(data, content_type, **kwargs):
+        # First file is the slowest, so it would finish LAST if truly
+        # concurrent — proving completion order isn't used for the result list.
+        delay = 0.15 if data == b"first" else 0.01
+        await asyncio.sleep(delay)
+        return {"filename": data.decode(), "image_path": f"/tmp/{data.decode()}",
+               "ocr_text": data.decode(), "ocr_error": ""}
+    monkeypatch.setattr(chat_routes, "save_and_ocr", ordered_slow_ocr)
+
+    captured_call = {}
+
+    def fake_compose(user_text, results):
+        captured_call["results"] = results
+        return "prompt"
+    monkeypatch.setattr(chat_routes, "compose_batch_prompt", fake_compose)
+
+    client, _ = _client(monkeypatch)
+    files = [
+        ("files", ("r1.jpg", b"first", "image/jpeg")),
+        ("files", ("r2.jpg", b"second", "image/jpeg")),
+        ("files", ("r3.jpg", b"third", "image/jpeg")),
+    ]
+    resp = client.post("/api/chat/sessions/s1/messages",
+                       data={"message": ""}, files=files)
+    assert resp.status_code == 200
+    assert [r["ocr_text"] for r in captured_call["results"]] == ["first", "second", "third"]

@@ -6,6 +6,7 @@ can act on (it then calls record_transaction with structured fields).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import uuid
@@ -18,6 +19,14 @@ from . import vision
 logger = logging.getLogger(__name__)
 
 _PDF_MAX_PAGES = 10
+
+# OCR calls are network round-trips, not CPU work, so running them one at a
+# time serialized a multi-page PDF (or a multi-file batch) into minutes.
+# Cap concurrency instead of going unbounded, to stay under the OCR
+# provider's rate limit — shared across both page-level (within one PDF)
+# and file-level (across a chat batch) concurrency via the same semaphore,
+# so the two don't multiply into an uncapped total.
+_MAX_CONCURRENT_OCR = 4
 
 
 def _pdf_to_page_images(data: bytes) -> list[bytes]:
@@ -36,7 +45,8 @@ def _pdf_to_page_images(data: bytes) -> list[bytes]:
     return images
 
 
-async def save_and_ocr(image_bytes: bytes, mime_type: str) -> dict:
+async def save_and_ocr(image_bytes: bytes, mime_type: str, *,
+                       ocr_semaphore: asyncio.Semaphore | None = None) -> dict:
     """Save one receipt file to disk and OCR it.
 
     Shared by build_receipt_prompt (one file) and build_batch_receipt_prompt
@@ -45,7 +55,14 @@ async def save_and_ocr(image_bytes: bytes, mime_type: str) -> dict:
     module-private) so a caller that wants per-file progress — the chat route,
     for a multi-receipt message — can call it directly in its own loop instead
     of going through build_batch_receipt_prompt's single opaque await.
+
+    ocr_semaphore: bounds concurrent OCR calls. A batch caller passes ONE
+    shared semaphore across every file in the message so page-level (here)
+    and file-level (the caller's own loop) concurrency share a single cap
+    instead of multiplying. Defaults to a fresh semaphore scoped to just
+    this call's own PDF pages, when called standalone (e.g. single-receipt).
     """
+    sem = ocr_semaphore or asyncio.Semaphore(_MAX_CONCURRENT_OCR)
     extension = (mime_type.split("/") + ["bin"])[1].split("+")[0]
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     filename = f"receipt-{timestamp}-{uuid.uuid4().hex[:6]}.{extension}"
@@ -55,25 +72,34 @@ async def save_and_ocr(image_bytes: bytes, mime_type: str) -> dict:
     image_path = receipts_dir / filename
     image_path.write_bytes(image_bytes)
 
+    async def _ocr(data: bytes, mime: str) -> str:
+        async with sem:
+            return await vision.extract_text(data, mime)
+
     ocr_error = ""
     if mime_type == "application/pdf":
-        # Render pages -> OCR each -> store first page as a preview image for the UI.
+        # Render pages -> OCR each (concurrently, bounded) -> store first page
+        # as a preview image for the UI. A page-OCR failure fails the whole
+        # PDF (gather's default propagate-first-exception), same as before —
+        # concurrency changes timing, not fault-tolerance semantics.
         try:
             pages = _pdf_to_page_images(image_bytes)
             if pages:
                 preview_path = image_path.with_suffix(".preview.png")
                 preview_path.write_bytes(pages[0])
+            page_texts = await asyncio.gather(
+                *(_ocr(page_png, "image/png") for page_png in pages))
             texts = []
-            for number, page_png in enumerate(pages, start=1):
+            for number, text in enumerate(page_texts, start=1):
                 texts.append(f"--- page {number} ---")
-                texts.append(await vision.extract_text(page_png, "image/png"))
+                texts.append(text)
             ocr_text = "\n".join(texts)
         except Exception as exc:  # noqa: BLE001
             ocr_text = ""
             ocr_error = str(exc)
     else:
         try:
-            ocr_text = await vision.extract_text(image_bytes, mime_type)
+            ocr_text = await _ocr(image_bytes, mime_type)
         except Exception as exc:  # noqa: BLE001
             ocr_text = ""
             ocr_error = str(exc)

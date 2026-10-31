@@ -20,6 +20,7 @@ from ..services import imports as imports_svc
 from ..services import mime_check
 from ..services import profiles as prof_svc
 from ..services.receipts import (
+    _MAX_CONCURRENT_OCR,
     build_receipt_prompt,
     compose_batch_prompt,
     save_and_ocr,
@@ -151,12 +152,29 @@ async def send_message(session_id: str, message: str = Form(""),
         try:
             prompt = message
             if multi:
+                # Files (and each PDF's own pages, inside save_and_ocr) OCR
+                # concurrently under one shared semaphore — sequential
+                # per-file awaiting was the reason 10 attachments took
+                # minutes. Results stay indexed by attachment order (not
+                # completion order) so "receipt N" always means the Nth file
+                # the user picked; progress just counts completions.
                 total = len(uploads)
-                results = []
-                for index, u in enumerate(uploads, start=1):
+                sem = asyncio.Semaphore(_MAX_CONCURRENT_OCR)
+
+                async def _ocr_indexed(index: int, u: dict) -> tuple[int, dict]:
+                    result = await save_and_ocr(
+                        u["data"], u["content_type"], ocr_semaphore=sem)
+                    return index, result
+
+                results: list[dict | None] = [None] * total
+                done = 0
+                for coro in asyncio.as_completed(
+                        [_ocr_indexed(i, u) for i, u in enumerate(uploads)]):
+                    index, result = await coro
+                    results[index] = result
+                    done += 1
                     yield _sse({"type": "status",
-                               "text": f"Reading receipt {index} of {total}…"})
-                    results.append(await save_and_ocr(u["data"], u["content_type"]))
+                               "text": f"Reading receipt {done} of {total}…"})
                 prompt = compose_batch_prompt(message, results)
             elif uploads:
                 data = uploads[0]["data"]
