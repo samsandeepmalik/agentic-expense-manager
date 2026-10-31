@@ -187,6 +187,14 @@ web/src/
 
 - WhatsApp QR codes die ~20s after issue; server refuses to serve stale ones
   (`qr_expired`) — use the Refresh button / `POST .../refresh`.
+- `neonize`/whatsmeow embeds a hardcoded WhatsApp Web client version; WhatsApp
+  periodically rejects stale ones outright at connect time (`ERROR
+  whatsmeow.Client Client outdated (405) connect failure`, `err-client-outdated`
+  in the pairing event) — pairing breaks with no code change on our side.
+  Symptom in `logs-api`: that 405 immediately followed by a websocket EOF, no
+  QR ever issued. Fix: bump the `neonize` pin (`poetry add neonize@^X`) to a
+  release that tracks a current whatsmeow client version, then `make restart`
+  and re-verify live (protected code — see below) before trusting it.
 - Self-chat JIDs arrive as `NUMBER@lid`, not `NUMBER@s.whatsapp.net` —
   that's why self-chat detection is `chat == sender`, not `chat == own`.
 - Chat statement import is WEB ONLY. WhatsApp `documentMessage` handling only

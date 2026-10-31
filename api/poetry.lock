@@ -925,23 +925,21 @@ requests = ">=2.22.0"
 
 [[package]]
 name = "neonize"
-version = "0.3.18.post0"
+version = "0.5.2"
 description = "Neonize is a Python library designed to streamline the automation of tasks on WhatsApp"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "neonize-0.3.18.post0-py3-none-any.whl", hash = "sha256:fb422f553ed76b3986430f6afd87439538fe59e1a28c7020897fa16594c88682"},
-    {file = "neonize-0.3.18.post0-py310-none-macosx_12_0_arm64.whl", hash = "sha256:a4c22ea5af86d3222a776c125c6b5792c4e0391140201dd7d13ab818d6510944"},
-    {file = "neonize-0.3.18.post0-py310-none-macosx_12_0_x86_64.whl", hash = "sha256:5c262016705210a282e5948572835b665181c7834909913729050f3c2f5f0462"},
-    {file = "neonize-0.3.18.post0-py310-none-manylinux2014_aarch64.whl", hash = "sha256:c504d23fd117aac27977958a37b3ce6767dfb37709336351bad5ed8d560747a6"},
-    {file = "neonize-0.3.18.post0-py310-none-manylinux2014_i686.whl", hash = "sha256:8280288c1b49ff8e24cea23a0bf0f572229561479e0d50c29f9564f4e3b473a0"},
-    {file = "neonize-0.3.18.post0-py310-none-manylinux2014_s390x.whl", hash = "sha256:2b3464d5b3a26300cb919bbbcffed2d81a3c80c302b57cec213fa63f672bb896"},
-    {file = "neonize-0.3.18.post0-py310-none-manylinux2014_x86_64.whl", hash = "sha256:cbf9d71a8f5446f0049e6e273d434e47798e15677332dfc55a90af372a788132"},
-    {file = "neonize-0.3.18.post0-py310-none-win32.whl", hash = "sha256:5294554bebb6afe79946735a1ccf3b9d3f40866ccfe0abc03fb3387f03190f3b"},
-    {file = "neonize-0.3.18.post0-py310-none-win_amd64.whl", hash = "sha256:77a02983200d70dd45d85ba28532d60ab06523a4a86ff889683d926fb2bf020c"},
-    {file = "neonize-0.3.18.post0-py310-none-win_arm64.whl", hash = "sha256:041d625bbcc7e446773d448a2d5062d4e5620fbd7a021e5f1a5384ae204efd11"},
-    {file = "neonize-0.3.18.post0.tar.gz", hash = "sha256:e7850fced62705a5334dbf256a4e6b7e07046d528dcc63c44d4d5a5884e20249"},
+    {file = "neonize-0.5.2-py310-none-macosx_12_0_arm64.whl", hash = "sha256:670376f5479c56da35fce80ba3c0f98540a46d77364b04f4a6405f6dda783617"},
+    {file = "neonize-0.5.2-py310-none-macosx_12_0_x86_64.whl", hash = "sha256:7065552a7d4acfb7327f845ba176f887125a20578d5bfafb683ecb870d12c41b"},
+    {file = "neonize-0.5.2-py310-none-manylinux2014_aarch64.whl", hash = "sha256:258fc41a72b60854255815c697ea24db14d96d6205d10e9524db3318615e3ca3"},
+    {file = "neonize-0.5.2-py310-none-manylinux2014_i686.whl", hash = "sha256:96ea2eb144064a5ae7667709021f4b9515e1206f163c267349ecbc531369ecdc"},
+    {file = "neonize-0.5.2-py310-none-manylinux2014_s390x.whl", hash = "sha256:bc0874e3abaab520433b9456b020c973885353af1caa2a73c0c71e866973e3ce"},
+    {file = "neonize-0.5.2-py310-none-manylinux2014_x86_64.whl", hash = "sha256:d737efc03d3a4db0a89d1efac3b55199472eb57acda041927ca8efc797872b69"},
+    {file = "neonize-0.5.2-py310-none-win32.whl", hash = "sha256:a4630048fe0e13a8d460bf128e46ae10845a4ae8ce4fafa2a0bf5669db696a87"},
+    {file = "neonize-0.5.2-py310-none-win_amd64.whl", hash = "sha256:08fa22aac7b8b6b66f2f53195cb12fa990685c89bd99a0ff17f346a0b4f4710a"},
+    {file = "neonize-0.5.2-py310-none-win_arm64.whl", hash = "sha256:9baeac04b085aa8e47a2c866fad9908a185097246a49ddac288d2825b2d08d2e"},
 ]
 
 [package.dependencies]
@@ -2289,4 +2287,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<3.14"
-content-hash = "a6915f3755333b9a849c062271b3f86a3a91aefdfe6ad11739d2b6146e8f4c91"
+content-hash = "d9465da8143e93141392dbfb11f9a275c0dc8dcaec942118180c8b6f16cdc2fa"
